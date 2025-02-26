@@ -1,0 +1,28 @@
+[package]
+name = "ground-control"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.96"
+base16ct = {version = "0.2.0", features = ["alloc"]}
+bytes = "1.10.0"
+dotenvy = "0.15.7"
+futures = "0.3.31"
+hifitime = {version = "4.0.2", features = ["std"]}
+nav-arrow = { version = "0.1.0", path = "../nav-arrow/nav-arrow" }
+reqwest = "0.12.12"
+restate-sdk = "0.3.2"
+rkyv = "0.8.10"
+rust-s3 = "0.35.1"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.139"
+serde_with = "3.12.0"
+sha2 = "0.10.8"
+tokio = { version = "1.43.0", features = ["full"] }
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
+uuid = {version ="1.13.1", features = ["v5"]}
+
+[dev-dependencies]
+restate-sdk-test-env = { version = "0.3.2", path = "../sdk-rust/test-env" }
