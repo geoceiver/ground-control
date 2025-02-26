@@ -2,8 +2,8 @@ mod objects;
 mod crawl;
 use restate_sdk::prelude::*;
 use objects::sv::{SVImpl, SV};
-use crawl::cddis::{CDDISProductDownloadWorkflow, CDDISProductDownloadWorkflowImpl, CDDISWeekDownloadWorkflow, CDDISWeekDownloadWorkflowImpl};
-use tracing::info;
+use crawl::cddis::{CDDISArchiveFile, CDDISArchiveFileImpl, CDDISArchiveWeek, CDDISArchiveWeekImpl, CDDISArchiveWorkflow, CDDISArchiveWorkflowImpl};
+//use tracing::info;
 
 #[tokio::main]
 async fn main() {
@@ -21,8 +21,9 @@ async fn main() {
 
     HttpServer::new(
         Endpoint::builder()
-            .bind(CDDISProductDownloadWorkflowImpl.serve())
-            .bind(CDDISWeekDownloadWorkflowImpl.serve())
+            .bind(CDDISArchiveWorkflowImpl.serve())
+            .bind(CDDISArchiveFileImpl.serve())
+            .bind(CDDISArchiveWeekImpl.serve())
             .bind(SVImpl.serve())
             .build(),
     )

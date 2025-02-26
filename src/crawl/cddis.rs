@@ -1,5 +1,5 @@
+use std::collections::BTreeMap;
 use std::{collections::HashMap, fmt::Debug, time::Duration};
-use bytes::Bytes;
 use hifitime::Epoch;
 use restate_sdk::prelude::*;
 use s3::Region;
@@ -19,21 +19,6 @@ const UPDATE_FREQUENCY:f64 = 30.0; //60 * 10; // update every ten minutes
 const CDDIS_PATH:&str = "https://cddis.nasa.gov/archive/gnss/products";
 
 
-// async so it can be wraped in a restate run closure
-pub async fn current_time_seconds() -> Result<f64, HandlerError> {
-    Ok(current_time().await?.to_gpst_seconds())
-}
-
-// async so it can be wraped in a restate run closure
-pub async fn current_time() -> Result<Epoch, HandlerError> {
-    Ok(Epoch::now()?)
-}
-
-// async so it can be wraped in a restate run closure
-pub async fn current_gpst_week() -> Result<u64, HandlerError> {
-   Ok(gpst_week(&current_time().await?))
-}
-
 pub fn gpst_week(epoch:&Epoch) -> u64 {
     let gpst_week = (epoch.to_gpst_days() / 7.0).floor() as u64;
     gpst_week
@@ -43,7 +28,66 @@ fn get_cddis_week_path(week:u64) -> String {
     format!("{}/{}", CDDIS_PATH, week)
 }
 
-async fn get_cddis_sha2_directory_listing(week:u64) -> Result<DirectoryListing, anyhow::Error> {
+fn get_cddis_file_path(file_path:&str) -> String {
+    format!("{}/{}", CDDIS_PATH, file_path)
+}
+
+// async so it can be wraped in a restate run closure
+async fn current_gpst_seconds() -> Result<f64, HandlerError> {
+    Ok(Epoch::now()?.to_gpst_seconds())
+}
+
+// async so it can be wraped in a restate run closure
+async fn current_gpst_week() -> Result<u64, HandlerError> {
+    Ok(gpst_week(&Epoch::now()?))
+}
+
+async fn get_archived_directory_listing(week:u64) -> Result<Json<DirectoryListing>, HandlerError> {
+
+
+    let bucket_name = "cddis-archive";
+    let region = Region::Custom {
+        region: "vultr-ewr1-1".to_owned(),
+        endpoint: "https://ewr1.vultrobjects.com".to_owned(),
+    };
+
+    let credentials = Credentials::from_env().unwrap();
+
+    let bucket = Bucket::new(bucket_name, region, credentials).unwrap();
+
+    let listing_path = format!("{}/sha512.json", week);
+    let listing_response = bucket.get_object(&listing_path).await;
+
+    let archived_listing:DirectoryListing;
+    if listing_response.is_ok() {
+        archived_listing = serde_json::from_str(listing_response.unwrap().as_str().unwrap())?;
+    }
+    else {
+        archived_listing = DirectoryListing::default();
+    }
+
+    Ok(Json(archived_listing))
+}
+async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryListing) -> Result<(), HandlerError> {
+
+    let bucket_name = "cddis-archive";
+    let region = Region::Custom {
+        region: "vultr-ewr1-1".to_owned(),
+        endpoint: "https://ewr1.vultrobjects.com".to_owned(),
+    };
+
+    let credentials = Credentials::from_env().unwrap();
+
+    let bucket = Bucket::new(bucket_name, region, credentials).unwrap();
+
+    let listing_path = format!("{}/sha512.json", week);
+    //update archived file list
+    bucket.put_object(&listing_path, json!(archived_listing).to_string().as_bytes()).await?;
+
+    Ok(())
+}
+
+async fn get_current_directory_listing(week:u64) -> Result<Json<DirectoryListing>, HandlerError> {
 
     let client = reqwest::Client::new();
     let response = client.get(format!("{}/SHA512SUMS", get_cddis_week_path(week)))
@@ -59,29 +103,14 @@ async fn get_cddis_sha2_directory_listing(week:u64) -> Result<DirectoryListing, 
         let line_parts:Vec<&str> = line.split_whitespace().collect();
 
         if line_parts.len() == 2 {
-            let file = line_parts.get(1).unwrap().to_string();
+            // store week/name.ext format
+            let file_path = format!("{}/{}", week, line_parts.get(1).unwrap().to_string());
             let hash = line_parts.get(0).unwrap().to_string();
-            directory_listing.files.insert(file, hash);
+            directory_listing.files.insert(file_path, hash);
         }
     }
 
-    Ok(directory_listing)
-}
-
-async fn get_cddis_file_with_hash(week:u64, file:&str) -> Result<(Bytes, String), anyhow::Error>{
-
-    let client = reqwest::Client::new();
-
-    let response = client.get(format!("{}/{}", get_cddis_week_path(week), file))
-        .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap())
-        .send()
-        .await?;
-
-    let resposne_bytes = response.bytes().await?;
-    let hash = Sha512::digest(&resposne_bytes);
-    let hex_hash = base16ct::lower::encode_string(&hash);
-
-    Ok((resposne_bytes, hex_hash))
+    Ok(Json(directory_listing))
 }
 
 
@@ -89,11 +118,11 @@ async fn get_cddis_file_with_hash(week:u64, file:&str) -> Result<(Bytes, String)
 #[derive(Default, Serialize, Deserialize, Debug)]
 struct DirectoryListing {
     #[serde_as(as = "Vec<(_, _)>")]
-    files: HashMap<String, String>,
+    files: BTreeMap<String, String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
-struct WeekList {
+pub struct WeekList {
     weeks:Vec<u64>
 }
 
@@ -106,26 +135,49 @@ impl WeekList {
 }
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
-struct DownloadRequest {
-    cddis_path:String,
+pub struct FileRequest {
+    file_path:String,
+    hash:String
+}
+
+#[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
+pub struct DownloadRequest {
+    weeks:Option<WeekList>,
     archive:Option<bool>,
     parallelism:Option<u32>
 }
 
 
-#[restate_sdk::workflow]
-pub trait CDDISWeekDownloadWorkflow {
-    async fn run(directory: Json<WeekList>) -> Result<bool, anyhow::Error>;
+#[restate_sdk::object]
+pub trait CDDISArchiveFile {
+    async fn download_file(file_request: Json<FileRequest>) -> Result<(), HandlerError>;
 }
 
-pub struct CDDISWeekDownloadWorkflowImpl;
+pub struct CDDISArchiveFileImpl;
 
-impl CDDISWeekDownloadWorkflow for CDDISWeekDownloadWorkflowImpl {
+impl CDDISArchiveFile for CDDISArchiveFileImpl {
 
-    async fn run(&self, ctx: WorkflowContext<'_>,week_list:Json<WeekList>) -> Result<bool, anyhow::Error> {
+    async fn download_file(&self, ctx: ObjectContext<'_>, file_request: Json<FileRequest>) -> Result<(), HandlerError> {
 
-        let week_list = week_list.into_inner();
+        let file_request = file_request.into_inner();
 
+        info!("starting download: {}", file_request.file_path);
+
+        let client = reqwest::Client::new();
+
+        let response = client.get(get_cddis_file_path(&file_request.file_path))
+            .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap())
+            .send()
+            .await?;
+
+        let response_bytes = response.bytes().await?;
+        let hash = Sha512::digest(&response_bytes);
+        let hex_hash = base16ct::lower::encode_string(&hash);
+
+        if !hex_hash.eq(&file_request.hash) {
+            error!("File hash mismatch for {}", &file_request.file_path);
+            return Err(HandlerError::from(TerminalError::new("Hash mismatch")));
+        }
 
         let bucket_name = "cddis-archive";
         let region = Region::Custom {
@@ -134,90 +186,84 @@ impl CDDISWeekDownloadWorkflow for CDDISWeekDownloadWorkflowImpl {
         };
 
         let credentials = Credentials::from_env().unwrap();
-        info!("{:?}", credentials);
 
         let bucket = Bucket::new(bucket_name, region, credentials).unwrap();
+        let s3_result = bucket.put_object(&file_request.file_path, &response_bytes).await;
 
-
-        let key = ctx.key();
-        for week in week_list.weeks {
-
-            info!("starrting downloads for week {} ({})", week, key);
-
-            let listing_path = format!("{}/sha512.json", week);
-            let listing_response = bucket.get_object(&listing_path).await;
-
-            let mut archived_listing:DirectoryListing;
-            if listing_response.is_ok() {
-                archived_listing = serde_json::from_str(listing_response.unwrap().as_str().unwrap())?;
-
-            }
-            else {
-                archived_listing = DirectoryListing::default();
-            }
-
-            let current_listing = get_cddis_sha2_directory_listing(week).await?;
-
-            let mut i = 0;
-            let total_files = current_listing.files.keys().len();
-            for file in current_listing.files.keys() {
-
-                if !archived_listing.files.contains_key(file) ||
-                    current_listing.files.get(file) != archived_listing.files.get(file)   {
-
-                    let (data, hash) = get_cddis_file_with_hash(week, file).await?;
-
-                    if current_listing.files.get(file).unwrap().eq(&hash)  {
-                        info!("{}/{} downloaded file {} with matching hash", i, total_files, file);
-                        archived_listing.files.insert(file.clone(), hash);
-                        let path = format!("{}/{}", week, file);
-                        let s3_result = bucket.put_object(&path, &data).await;
-                        if s3_result.is_ok() {
-                            info!("uploaded file {}", path);
-                        }
-                        else {
-                            error!("file upload error: {}", s3_result.err().unwrap().to_string());
-                        }
-                    }
-                    else {
-                        error!("downloaded file {} with hash{}\nCDDIS hash is {}", file, hash, current_listing.files.get(file).unwrap())
-                    }
-                    i += 1;
-                }
-
-                if i > 1 {
-                    break;
-                }
-            }
-
-            bucket.put_object(&listing_path, json!(archived_listing).to_string().as_bytes()).await?;
-
-            info!("completeded downloads for week {} ({})", week, key);
+        if s3_result.is_err() {
+            error!("File upload failure {}", &file_request.file_path);
+            return Err(HandlerError::from(TerminalError::new("File upload failure")));
         }
-        Ok(true)
+        ctx.set("last_update", Epoch::now()?.to_gpst_seconds());
+        info!("finished download: {}", file_request.file_path);
+
+        Ok(())
     }
 }
 
-#[restate_sdk::workflow]
-pub trait CDDISProductDownloadWorkflow {
-    async fn run(directory: Json<DownloadRequest>) -> Result<bool, anyhow::Error>;
-
-    // #[shared]
-    // async fn status(secret: String) -> Result<(), anyhow::Error>;
+#[restate_sdk::object]
+pub trait CDDISArchiveWeek {
+    async fn download_week() -> Result<(), HandlerError>;
 }
 
-pub struct CDDISProductDownloadWorkflowImpl;
+pub struct CDDISArchiveWeekImpl;
 
-impl CDDISProductDownloadWorkflow for CDDISProductDownloadWorkflowImpl {
+impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
-    async fn run(&self, mut ctx: WorkflowContext<'_>, download_request:Json<DownloadRequest>) -> Result<bool, anyhow::Error> {
+    async fn download_week(&self, ctx: ObjectContext<'_>) -> Result<(), HandlerError> {
 
-        let last_update_started = ctx.run(||current_time_seconds()).await.unwrap();
+        let week:u64 = ctx.key().parse::<u64>()?;
+
+        info!("start week {}", week );
+
+        let mut archived_listing = ctx.run(||get_archived_directory_listing(week)).await?.into_inner();
+        let current_listing = ctx.run(||get_current_directory_listing(week)).await?.into_inner();
+
+
+        let mut file_archive_count = 0;
+        for (file_path, hash) in current_listing.files.iter() {
+
+            if !archived_listing.files.contains_key(file_path) ||
+                hash != archived_listing.files.get(file_path).unwrap()   {
+
+                let file_request = FileRequest {file_path:file_path.clone(), hash:hash.clone()};
+                let file_request_response = ctx.object_client::<CDDISArchiveFileClient>(file_path).download_file(Json(file_request)).call().await;
+
+                if file_request_response.is_ok() {
+                    archived_listing.files.insert(file_path.clone(), hash.clone());
+                    file_archive_count += 1;
+                }
+            }
+        }
+
+        ctx.set("total_files", archived_listing.files.len() as u64);
+        ctx.set("last_update", Epoch::now()?.to_gpst_seconds());
+        info!("finished week {}: {}/{} files archived, {} new/changed", week, archived_listing.files.len(), current_listing.files.len(), file_archive_count);
+
+        put_archived_directory_listing(week, &archived_listing).await?;
+
+        Ok(())
+    }
+}
+
+
+#[restate_sdk::workflow]
+pub trait CDDISArchiveWorkflow {
+    async fn run(directory: Json<DownloadRequest>) -> Result<(), HandlerError>;
+
+    async fn download_weeks(weeks: Json<WeekList>) -> Result<(), HandlerError>;
+}
+
+pub struct CDDISArchiveWorkflowImpl;
+
+impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
+
+    async fn run(&self, mut ctx: WorkflowContext<'_>, download_request:Json<DownloadRequest>) -> Result<(), HandlerError> {
+
+        let last_update_started = ctx.run(||current_gpst_seconds()).await.unwrap();
         let current_week = ctx.run(||current_gpst_week()).await.unwrap();
         let download_request = download_request.into_inner();
-        //let mut week_list:WeekList = WeekList::default();
 
-        // need to handle archive initialization vs update
 
         let first_week;
         if download_request.archive.is_some_and(|a|a==true) {
@@ -238,6 +284,7 @@ impl CDDISProductDownloadWorkflow for CDDISProductDownloadWorkflowImpl {
         }
 
         let week_chunks:Vec<Vec<u64>> = weeks.chunks(weeks.len() / parallelism).map(|chunk| chunk.to_vec()).collect();
+
         let mut job_status_list = Vec::new();
         for parallel_job in 0..parallelism {
 
@@ -248,10 +295,9 @@ impl CDDISProductDownloadWorkflow for CDDISProductDownloadWorkflowImpl {
                 .map(|x|x.to_string()).collect::<Vec<String>>().join(","));
 
             let download_uuid = ctx.rand_uuid();
-            // let (id, promise) = ctx.awakeable::<String>();
-            // job_status_list.push(promise);
-            let promise = ctx.workflow_client::<CDDISWeekDownloadWorkflowClient>(download_uuid)
-                .run(Json(WeekList::new(job_weeks))).call();
+
+            let promise = ctx.workflow_client::<CDDISArchiveWorkflowClient>(download_uuid)
+                .download_weeks(Json(WeekList::new(job_weeks))).call();
 
             job_status_list.push(promise);
 
@@ -259,11 +305,10 @@ impl CDDISProductDownloadWorkflow for CDDISProductDownloadWorkflowImpl {
 
         // rust sdk only supports sequential awaits on promises
         for promise in job_status_list {
-            let _ = promise.await;
+            let _ = promise.await; // allow failures but need to log/re-try out of workflow?
         }
-        //let _ = futures::future::try_join_all(job_status_list).await;
 
-        let last_update_completed = ctx.run(||current_time_seconds()).await.unwrap();
+        let last_update_completed = ctx.run(||current_gpst_seconds()).await.unwrap();
         let update_duration = last_update_completed - last_update_started;
 
         info!("update took {} seconds", update_duration);
@@ -275,16 +320,22 @@ impl CDDISProductDownloadWorkflow for CDDISProductDownloadWorkflowImpl {
 
         let next_job_id = ctx.rand_uuid();
         ctx.workflow_client::
-            <CDDISProductDownloadWorkflowClient>(next_job_id)
+            <CDDISArchiveWorkflowClient>(next_job_id)
             .run(Json(download_request))
             .send_with_delay(Duration::from_secs(seconds_until_next_update as u64));
 
-        Ok(true)
+        Ok(())
     }
 
-    // fn status(&self, _ctx:SharedWorkflowContext, secret:String) -> Result<(), anyhow::Error>{
+    async fn download_weeks(&self, ctx: WorkflowContext<'_>, weeks: Json<WeekList>) -> Result<(), HandlerError> {
 
-    //     Ok(())
-    // }
+        let weeks = weeks.into_inner();
+
+        for week in weeks.weeks {
+            ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_week().call().await?;
+        }
+
+        Ok(())
+    }
 
 }
