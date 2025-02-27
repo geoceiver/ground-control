@@ -294,7 +294,7 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
 
         let week_chunks:Vec<Vec<u64>> = weeks.chunks(weeks.len() / parallelism).map(|chunk| chunk.to_vec()).collect();
 
-        //let mut job_status_list = Vec::new();
+        let mut job_status_list = Vec::new();
         for parallel_job in 0..parallelism {
 
             let job_weeks = week_chunks.get(parallel_job).unwrap().clone();
@@ -305,17 +305,17 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
 
             let download_uuid = ctx.rand_uuid();
 
-            ctx.workflow_client::<CDDISArchiveWorkflowClient>(download_uuid)
-                .download_weeks(Json(WeekList::new(job_weeks))).call().await?;
+            let promise = ctx.workflow_client::<CDDISArchiveWorkflowClient>(download_uuid)
+                .download_weeks(Json(WeekList::new(job_weeks))).call();
 
-            //job_status_list.push(promise);
+            job_status_list.push(promise);
 
         }
 
         // rust sdk only supports sequential awaits on promises
-        // for promise in job_status_list {
-        //     let _ = promise.await; // allow failures but need to log/re-try out of workflow?
-        // }
+        for promise in job_status_list {
+            let _ = promise.await; // allow failures but need to log/re-try out of workflow?
+        }
 
         let last_update_completed = ctx.run(||current_gpst_seconds()).await.unwrap();
         let update_duration = last_update_completed - last_update_started;
