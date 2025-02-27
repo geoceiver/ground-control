@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::{collections::HashMap, fmt::Debug, time::Duration};
+use futures::TryStreamExt;
 use hifitime::Epoch;
 use restate_sdk::prelude::*;
 use s3::Region;
@@ -7,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::serde_as;
 use sha2::{Sha512, Digest};
+use tokio_util::io::StreamReader;
 use tracing::{error, info};
 
 use s3::bucket::Bucket;
@@ -170,14 +172,16 @@ impl CDDISArchiveFile for CDDISArchiveFileImpl {
             .send()
             .await?;
 
-        let response_bytes = response.bytes().await?;
-        let hash = Sha512::digest(&response_bytes);
-        let hex_hash = base16ct::lower::encode_string(&hash);
+        // let response_bytes = response.bytes().await?;
 
-        if !hex_hash.eq(&file_request.hash) {
-            error!("File hash mismatch for {}", &file_request.file_path);
-            return Err(HandlerError::from(TerminalError::new("Hash mismatch")));
-        }
+        // io::copy(&mut response, &mut out)
+        // let hash = Sha512::digest(&response_bytes);
+        // let hex_hash = base16ct::lower::encode_string(&hash);
+
+        // if !hex_hash.eq(&file_request.hash) {
+        //     error!("File hash mismatch for {}", &file_request.file_path);
+        //     return Err(HandlerError::from(TerminalError::new("Hash mismatch")));
+        // }
 
         let bucket_name = "cddis-archive";
         let region = Region::Custom {
@@ -188,7 +192,8 @@ impl CDDISArchiveFile for CDDISArchiveFileImpl {
         let credentials = Credentials::from_env().unwrap();
 
         let bucket = Bucket::new(bucket_name, region, credentials).unwrap();
-        let s3_result = bucket.put_object(&file_request.file_path, &response_bytes).await;
+        let mut reader = StreamReader::new(response.bytes_stream().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
+        let s3_result = bucket.put_object_stream(&mut reader, &file_request.file_path).await;
 
         if s3_result.is_err() {
             error!("File upload failure {}", &file_request.file_path);
