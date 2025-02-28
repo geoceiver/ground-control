@@ -14,7 +14,7 @@ hifitime = {version = "4.0.2", features = ["std"]}
 reqwest = {version = "0.12.12", features=["stream"]}
 restate-sdk = "0.3.2"
 rkyv = "0.8.10"
-rust-s3 = "0.35.1"
+rusty-s3 = "0.7.0"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.139"
 serde_with = "3.12.0"

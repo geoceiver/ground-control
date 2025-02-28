@@ -1,16 +1,15 @@
 use std::collections::BTreeMap;
+use std::env;
 use std::{fmt::Debug, time::Duration};
 use futures::StreamExt;
 use hifitime::Epoch;
+use reqwest::Url;
 use restate_sdk::prelude::*;
+use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::serde_as;
 use tracing::info;
-
-use s3::Region;
-use s3::bucket::Bucket;
-use s3::creds::Credentials;
 
 
 const MIN_GPST_WEEKS: u64 = 2238; // CDDIS format changed for products prior to week 2238
@@ -18,6 +17,39 @@ const WEEK_LOOKBACK_PERIOD: u64 = 12; // Look back 12 weeks for updated products
 const UPDATE_FREQUENCY:f64 = 30.0; //60 * 10; // update every ten minutes
 const CDDIS_PATH:&str = "https://cddis.nasa.gov/archive/gnss/products";
 
+fn s3_bucket() -> Bucket {
+    // setting up a bucket
+    let endpoint = "https://ewr1.vultrobjects.com".parse().expect("endpoint is a valid Url");
+    let path_style = UrlStyle::VirtualHost;
+    let name = "cddis-archive";
+    let region = "vultr-ewr1-1";
+    Bucket::new(endpoint, path_style, name, region).expect("Url has a valid scheme and host")
+}
+
+fn s3_credentials() -> Credentials {
+    // setting up the credentials
+    let key = env::var("AWS_ACCESS_KEY_ID").expect("AWS_ACCESS_KEY_ID is set and a valid String");
+    let secret = env::var("AWS_SECRET_ACCESS_KEY").expect("AWS_ACCESS_KEY_ID is set and a valid String");
+    Credentials::new(key, secret)
+}
+
+fn s3_get_object_url(path:&str) -> Url {
+    let bucket = s3_bucket();
+    let credentials = s3_credentials();
+
+    let get_object = bucket.get_object(Some(&credentials), path);
+    let presigned_url_duration = Duration::from_secs(60);
+    get_object.sign(presigned_url_duration)
+}
+
+fn s3_put_object_url(path:&str) -> Url {
+    let bucket = s3_bucket();
+    let credentials = s3_credentials();
+
+    let get_object = bucket.put_object(Some(&credentials), path);
+    let presigned_url_duration = Duration::from_secs(60);
+    get_object.sign(presigned_url_duration)
+}
 
 pub fn gpst_week(epoch:&Epoch) -> u64 {
     let gpst_week = (epoch.to_gpst_days() / 7.0).floor() as u64;
@@ -44,23 +76,16 @@ async fn current_gpst_week() -> Result<u64, HandlerError> {
 
 async fn get_archived_directory_listing(week:u64) -> Result<Json<DirectoryListing>, HandlerError> {
 
-
-    let bucket_name = "cddis-archive";
-    let region = Region::Custom {
-        region: "vultr-ewr1-1".to_owned(),
-        endpoint: "https://ewr1.vultrobjects.com".to_owned(),
-    };
-
-    let credentials = Credentials::from_env().unwrap();
-
-    let bucket = Bucket::new(bucket_name, region, credentials).unwrap();
-
     let listing_path = format!("{}/sha512.json", week);
-    let listing_response = bucket.get_object(&listing_path).await;
+
+    let listing_url = s3_get_object_url(listing_path.as_str());
+
+    let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+    let listing_response = client.get(listing_url).send().await;
 
     let archived_listing:DirectoryListing;
     if listing_response.is_ok() {
-        archived_listing = serde_json::from_str(listing_response.unwrap().as_str().unwrap())?;
+        archived_listing = serde_json::from_str(listing_response.unwrap().text().await?.as_str())?;
     }
     else {
         archived_listing = DirectoryListing::default();
@@ -70,19 +95,14 @@ async fn get_archived_directory_listing(week:u64) -> Result<Json<DirectoryListin
 }
 async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryListing) -> Result<(), HandlerError> {
 
-    let bucket_name = "cddis-archive";
-    let region = Region::Custom {
-        region: "vultr-ewr1-1".to_owned(),
-        endpoint: "https://ewr1.vultrobjects.com".to_owned(),
-    };
-
-    let credentials = Credentials::from_env().unwrap();
-
-    let bucket = Bucket::new(bucket_name, region, credentials).unwrap();
-
     let listing_path = format!("{}/sha512.json", week);
-    //update archived file list
-    bucket.put_object(&listing_path, json!(archived_listing).to_string().as_bytes()).await?;
+
+    let listing_url = s3_put_object_url(listing_path.as_str());
+
+    let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+    let body = json!(archived_listing);
+    client.put(listing_url).body(body.to_string()).send().await?;
+
 
     Ok(())
 }
@@ -205,10 +225,20 @@ impl CDDISArchiveFile for CDDISArchiveFileImpl {
         let mut stream = client.get(get_cddis_file_path(&file_request.file_path))
              .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?.bytes_stream();
 
+
+        let upload_url = s3_put_object_url(file_request.file_path.as_str());
+
         let mut size_bytes =0;
+        let mut bytes:Vec<u8> = Vec::new();
         while let Some(item) = stream.next().await {
-            size_bytes += item?.len();
+            let chunk = item?;
+            size_bytes += chunk.len();
+            bytes.append(&mut chunk.to_vec());
         }
+
+        let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+        //let body = json!(archived_listing);
+        client.put(upload_url).body(bytes).send().await?;
 
         info!("finished download: {}, {} bytes", file_request.file_path, size_bytes);
 
