@@ -1,15 +1,14 @@
 use std::collections::BTreeMap;
-use std::{collections::HashMap, fmt::Debug, time::Duration};
-use anyhow::anyhow;
+use std::{fmt::Debug, time::Duration};
+use futures::StreamExt;
 use hifitime::Epoch;
 use restate_sdk::prelude::*;
-use s3::Region;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::serde_as;
-use sha2::{Sha512, Digest};
-use tracing::{error, info};
+use tracing::info;
 
+use s3::Region;
 use s3::bucket::Bucket;
 use s3::creds::Credentials;
 
@@ -90,7 +89,7 @@ async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryLis
 
 async fn get_current_directory_listing(week:u64) -> Result<Json<DirectoryListing>, HandlerError> {
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
     let response = client.get(format!("{}/SHA512SUMS", get_cddis_week_path(week)))
         .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap())
         .send()
@@ -114,30 +113,43 @@ async fn get_current_directory_listing(week:u64) -> Result<Json<DirectoryListing
     Ok(Json(directory_listing))
 }
 
-async fn copy_file_to_s3(file_request:&FileRequest) -> Result<(), anyhow::Error> {
+//async fn copy_file_to_s3(file_request:&FileRequest) -> Result<(), anyhow::Error> {
 
 
-    info!("starting download: {}", file_request.file_path);
+    // let client = reqwest::Client::new();
 
-    let client = reqwest::Client::new();
+    // let response = client.get(get_cddis_file_path(&file_request.file_path))
+    //     .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).
 
-    let response = client.get(get_cddis_file_path(&file_request.file_path))
-        .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap())
-        .send()
-        .await?;
+    // let response = client.put(get_cddis_file_path(&file_request.file_path))
+    //     .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).await
 
-    let response_bytes = response.bytes().await?;
+    // let url = "http://localhost:9000".parse().unwrap();
+    //     let key = "minioadmin";
+    //     let secret = "minioadmin";
+    //     let region = "minio";
 
-    let hash = Sha512::digest(&response_bytes);
-    let hex_hash = base16ct::lower::encode_string(&hash);
+    //     let bucket = Bucket::new(url, UrlStyle::Path, "test", region).unwrap();
+    //     let credential = Credentials::new(key, secret);
 
-    if !hex_hash.eq(&file_request.hash) {
-        error!("File hash mismatch for {}", &file_request.file_path);
-        return Err(anyhow!("Hash mismatch"));
-    }
+    //     let mut action = GetObject::new(&bucket, Some(&credential), "img.jpg");
+    //     action
+    //         .query_mut()
+    //         .insert("response-cache-control", "no-cache, no-store");
+    //     let signed_url = action.sign(ONE_HOUR);
 
-    Ok(())
-}
+    // let response_bytes = response.bytes().await?;
+
+    // let hash = Sha512::digest(&response_bytes);
+    // let hex_hash = base16ct::lower::encode_string(&hash);
+
+    // if !hex_hash.eq(&file_request.hash) {
+    //     error!("File hash mismatch for {}", &file_request.file_path);
+    //     return Err(anyhow!("Hash mismatch"));
+    // }
+
+//     Ok(())
+// }
 
 #[serde_as]
 #[derive(Default, Serialize, Deserialize, Debug)]
@@ -186,7 +198,25 @@ impl CDDISArchiveFile for CDDISArchiveFileImpl {
 
         let file_request = file_request.into_inner();
 
-        copy_file_to_s3(&file_request).await?;
+        info!("starting download: {}", file_request.file_path);
+
+        let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+
+        let mut stream = client.get(get_cddis_file_path(&file_request.file_path))
+             .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?.bytes_stream();
+
+        let mut size_bytes =0;
+        while let Some(item) = stream.next().await {
+            size_bytes += item?.len();
+        }
+
+        info!("finished download: {}, {} bytes", file_request.file_path, size_bytes);
+
+        // let stream = reqwest::get("http://httpbin.org/ip")
+        //     .await?
+        //     .bytes_stream();
+
+        //copy_file_to_s3(&file_request).await?;
 
         // let bucket_name = "cddis-archive";
         // let region = Region::Custom {

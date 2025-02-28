@@ -665,6 +665,7 @@ dependencies = [
  "bytes",
  "dotenvy",
  "futures",
+ "futures-util",
  "hifitime",
  "reqwest",
  "restate-sdk",
