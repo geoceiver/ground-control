@@ -80,7 +80,7 @@ async fn get_archived_directory_listing(week:u64) -> Result<Json<DirectoryListin
 
     let listing_url = s3_get_object_url(listing_path.as_str());
 
-    let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+    let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
     let listing_response = client.get(listing_url).send().await;
 
 
@@ -101,7 +101,7 @@ async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryLis
 
     let listing_url = s3_put_object_url(listing_path.as_str());
 
-    let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+    let client = reqwest::Client::builder().use_rustls_tls().use_rustls_tls().pool_max_idle_per_host(0).build()?;
     let body = json!(archived_listing);
     client.put(listing_url).body(body.to_string()).send().await?;
 
@@ -111,7 +111,7 @@ async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryLis
 
 async fn get_current_directory_listing(week:u64) -> Result<Json<DirectoryListing>, HandlerError> {
 
-    let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+    let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
     let response = client.get(format!("{}/SHA512SUMS", get_cddis_week_path(week)))
         .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap())
         .send()
@@ -182,7 +182,7 @@ impl CDDISArchiveFile for CDDISArchiveFileImpl {
 
         info!("starting download: {}", file_path);
 
-        let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+        let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
 
         let mut stream = client.get(get_cddis_file_path(&file_path))
              .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?.bytes_stream();
