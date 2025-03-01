@@ -169,26 +169,24 @@ pub struct DownloadRequest {
 
 #[restate_sdk::object]
 pub trait CDDISArchiveFile {
-    async fn download_file(file_request: Json<FileRequest>) -> Result<(), HandlerError>;
+    async fn download_file(file_request:String) -> Result<(), HandlerError>;
 }
 
 pub struct CDDISArchiveFileImpl;
 
 impl CDDISArchiveFile for CDDISArchiveFileImpl {
 
-    async fn download_file(&self, ctx: ObjectContext<'_>, file_request: Json<FileRequest>) -> Result<(), HandlerError> {
+    async fn download_file(&self, _ctx: ObjectContext<'_>, file_path:String) -> Result<(), HandlerError> {
 
-        let file_request = file_request.into_inner();
-
-        info!("starting download: {}", file_request.file_path);
+        info!("starting download: {}", file_path);
 
         let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
 
-        let mut stream = client.get(get_cddis_file_path(&file_request.file_path))
+        let mut stream = client.get(get_cddis_file_path(&file_path))
              .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?.bytes_stream();
 
 
-        let upload_url = s3_put_object_url(file_request.file_path.as_str());
+        let upload_url = s3_put_object_url(file_path.as_str());
 
         let mut size_bytes =0;
         let mut bytes:Vec<u8> = Vec::new();
@@ -198,10 +196,9 @@ impl CDDISArchiveFile for CDDISArchiveFileImpl {
             bytes.append(&mut chunk.to_vec());
         }
 
-        //let body = json!(archived_listing);
         client.put(upload_url).body(bytes).send().await?;
 
-        info!("finished download: {}, {} bytes", file_request.file_path, size_bytes);
+        info!("finished download: {}, {} bytes", file_path, size_bytes);
 
         Ok(())
     }
@@ -231,8 +228,8 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
             if !archived_listing.files.contains_key(file_path) ||
                 hash != archived_listing.files.get(file_path).unwrap()   {
 
-                let file_request = FileRequest {file_path:file_path.clone(), hash:hash.clone()};
-                ctx.object_client::<CDDISArchiveFileClient>(file_path).download_file(Json(file_request)).call().await?;
+                //let file_request = FileRequest {file_path:file_path.clone(), hash:hash.clone()};
+                ctx.object_client::<CDDISArchiveFileClient>(file_path).download_file(file_path.clone()).call().await?;
 
                 archived_listing.files.insert(file_path.clone(), hash.clone());
                 file_archive_count += 1;
