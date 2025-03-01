@@ -8,7 +8,6 @@ static GLOBAL: Jemalloc = Jemalloc;
 mod objects;
 mod crawl;
 use restate_sdk::prelude::*;
-use objects::sv::{SVImpl, SV};
 use crawl::cddis::{CDDISArchiveFile, CDDISArchiveFileImpl, CDDISArchiveWeek, CDDISArchiveWeekImpl, CDDISArchiveWorkflow, CDDISArchiveWorkflowImpl};
 //use tracing::info;
 
@@ -27,11 +26,11 @@ async fn main() {
     //info!("EARTHDATA_TOKEN {}", std::env::var("EARTHDATA_TOKEN").unwrap_or_else(|_| "not set".to_string()));
 
     HttpServer::new(
-        Endpoint::builder()
+        Endpoint::builder().with_protocol_mode(restate_sdk::discovery::ProtocolMode::RequestResponse)
             .bind(CDDISArchiveWorkflowImpl.serve())
             .bind(CDDISArchiveFileImpl.serve())
             .bind(CDDISArchiveWeekImpl.serve())
-            .bind(SVImpl.serve())
+            //.bind(SVImpl.serve())
             .build(),
     )
     .listen_and_serve("0.0.0.0:9080".parse().unwrap())
