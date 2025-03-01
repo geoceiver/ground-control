@@ -133,44 +133,6 @@ async fn get_current_directory_listing(week:u64) -> Result<Json<DirectoryListing
     Ok(Json(directory_listing))
 }
 
-//async fn copy_file_to_s3(file_request:&FileRequest) -> Result<(), anyhow::Error> {
-
-
-    // let client = reqwest::Client::new();
-
-    // let response = client.get(get_cddis_file_path(&file_request.file_path))
-    //     .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).
-
-    // let response = client.put(get_cddis_file_path(&file_request.file_path))
-    //     .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).await
-
-    // let url = "http://localhost:9000".parse().unwrap();
-    //     let key = "minioadmin";
-    //     let secret = "minioadmin";
-    //     let region = "minio";
-
-    //     let bucket = Bucket::new(url, UrlStyle::Path, "test", region).unwrap();
-    //     let credential = Credentials::new(key, secret);
-
-    //     let mut action = GetObject::new(&bucket, Some(&credential), "img.jpg");
-    //     action
-    //         .query_mut()
-    //         .insert("response-cache-control", "no-cache, no-store");
-    //     let signed_url = action.sign(ONE_HOUR);
-
-    // let response_bytes = response.bytes().await?;
-
-    // let hash = Sha512::digest(&response_bytes);
-    // let hex_hash = base16ct::lower::encode_string(&hash);
-
-    // if !hex_hash.eq(&file_request.hash) {
-    //     error!("File hash mismatch for {}", &file_request.file_path);
-    //     return Err(anyhow!("Hash mismatch"));
-    // }
-
-//     Ok(())
-// }
-
 #[serde_as]
 #[derive(Default, Serialize, Deserialize, Debug)]
 struct DirectoryListing {
@@ -236,35 +198,10 @@ impl CDDISArchiveFile for CDDISArchiveFileImpl {
             bytes.append(&mut chunk.to_vec());
         }
 
-        let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
         //let body = json!(archived_listing);
         client.put(upload_url).body(bytes).send().await?;
 
         info!("finished download: {}, {} bytes", file_request.file_path, size_bytes);
-
-        // let stream = reqwest::get("http://httpbin.org/ip")
-        //     .await?
-        //     .bytes_stream();
-
-        //copy_file_to_s3(&file_request).await?;
-
-        // let bucket_name = "cddis-archive";
-        // let region = Region::Custom {
-        //     region: "vultr-ewr1-1".to_owned(),
-        //     endpoint: "https://ewr1.vultrobjects.com".to_owned(),
-        // };
-
-        // let credentials = Credentials::from_env().unwrap();
-
-        // let bucket = Bucket::new(bucket_name, region, credentials).unwrap();
-        // let s3_result = bucket.put_object(&file_request.file_path, &response_bytes).await;
-
-        // if s3_result.is_err() {
-        //     error!("File upload failure {}", &file_request.file_path);
-        //     return Err(HandlerError::from(TerminalError::new("File upload failure")));
-        // }
-        // ctx.set("last_update", Epoch::now()?.to_gpst_seconds());
-        // info!("finished download: {}", file_request.file_path);
 
         Ok(())
     }
@@ -288,7 +225,6 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
         let mut archived_listing = ctx.run(||get_archived_directory_listing(week)).await?.into_inner();
         let current_listing = ctx.run(||get_current_directory_listing(week)).await?.into_inner();
 
-
         let mut file_archive_count = 0;
         for (file_path, hash) in current_listing.files.iter() {
 
@@ -296,12 +232,10 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
                 hash != archived_listing.files.get(file_path).unwrap()   {
 
                 let file_request = FileRequest {file_path:file_path.clone(), hash:hash.clone()};
-                let file_request_response = ctx.object_client::<CDDISArchiveFileClient>(file_path).download_file(Json(file_request)).call().await;
+                ctx.object_client::<CDDISArchiveFileClient>(file_path).download_file(Json(file_request)).call().await?;
 
-                if file_request_response.is_ok() {
-                    archived_listing.files.insert(file_path.clone(), hash.clone());
-                    file_archive_count += 1;
-                }
+                archived_listing.files.insert(file_path.clone(), hash.clone());
+                file_archive_count += 1;
             }
         }
 
