@@ -83,15 +83,17 @@ async fn get_archived_directory_listing(week:u64) -> Result<Json<DirectoryListin
     let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
     let listing_response = client.get(listing_url).send().await;
 
-    let archived_listing:DirectoryListing;
+
     if listing_response.is_ok() {
-        archived_listing = serde_json::from_str(listing_response.unwrap().text().await?.as_str())?;
-    }
-    else {
-        archived_listing = DirectoryListing::default();
+        let listing_response =  listing_response.unwrap();
+        if listing_response.status().is_success() {
+             let archived_listing:DirectoryListing;
+            archived_listing = serde_json::from_str(listing_response.text().await?.as_str())?;
+            return Ok(Json(archived_listing));
+        }
     }
 
-    Ok(Json(archived_listing))
+    Ok(Json(DirectoryListing::default()))
 }
 async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryListing) -> Result<(), HandlerError> {
 
