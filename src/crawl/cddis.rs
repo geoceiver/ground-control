@@ -194,6 +194,7 @@ impl WeekList {
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
 pub struct FileRequest {
+    week:u64,
     file_path:String,
     hash:String
 }
@@ -207,15 +208,40 @@ pub struct DownloadRequest {
 
 
 #[restate_sdk::object]
-pub trait CDDISArchiveFile {
-    async fn download_file(file_request: Json<FileRequest>) -> Result<(), HandlerError>;
+pub trait CDDISArchiveWeek {
+    async fn download_week() -> Result<(), HandlerError>;
+    async fn download_file(file_request:Json<FileRequest>) -> Result<(), HandlerError>;
 }
 
-pub struct CDDISArchiveFileImpl;
+pub struct CDDISArchiveWeekImpl;
 
-impl CDDISArchiveFile for CDDISArchiveFileImpl {
+impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
-    async fn download_file(&self, ctx: ObjectContext<'_>, file_request: Json<FileRequest>) -> Result<(), HandlerError> {
+    async fn download_week(&self, ctx: ObjectContext<'_>) -> Result<(), HandlerError> {
+
+        let week:u64 = ctx.key().parse::<u64>()?;
+
+        info!("start week {}", week );
+
+        let archived_listing = get_archived_directory_listing(week).await?;
+        let current_listing = get_current_directory_listing(week).await?;
+
+
+        for (file_path, hash) in current_listing.files.iter() {
+
+            if !archived_listing.files.contains_key(file_path) ||
+                hash != archived_listing.files.get(file_path).unwrap()   {
+
+                let file_request = FileRequest {file_path:file_path.clone(), hash:hash.clone(), week};
+                ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_file(Json(file_request)).send();
+
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn download_file(&self, _ctx: ObjectContext<'_>, file_request: Json<FileRequest>) -> Result<(), HandlerError> {
 
         let file_request = file_request.into_inner();
 
@@ -243,73 +269,9 @@ impl CDDISArchiveFile for CDDISArchiveFileImpl {
 
         info!("finished download: {}, {} bytes", file_request.file_path, size_bytes);
 
-        // let stream = reqwest::get("http://httpbin.org/ip")
-        //     .await?
-        //     .bytes_stream();
-
-        //copy_file_to_s3(&file_request).await?;
-
-        // let bucket_name = "cddis-archive";
-        // let region = Region::Custom {
-        //     region: "vultr-ewr1-1".to_owned(),
-        //     endpoint: "https://ewr1.vultrobjects.com".to_owned(),
-        // };
-
-        // let credentials = Credentials::from_env().unwrap();
-
-        // let bucket = Bucket::new(bucket_name, region, credentials).unwrap();
-        // let s3_result = bucket.put_object(&file_request.file_path, &response_bytes).await;
-
-        // if s3_result.is_err() {
-        //     error!("File upload failure {}", &file_request.file_path);
-        //     return Err(HandlerError::from(TerminalError::new("File upload failure")));
-        // }
-        // ctx.set("last_update", Epoch::now()?.to_gpst_seconds());
-        // info!("finished download: {}", file_request.file_path);
-
-        Ok(())
-    }
-}
-
-#[restate_sdk::object]
-pub trait CDDISArchiveWeek {
-    async fn download_week() -> Result<(), HandlerError>;
-}
-
-pub struct CDDISArchiveWeekImpl;
-
-impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
-
-    async fn download_week(&self, ctx: ObjectContext<'_>) -> Result<(), HandlerError> {
-
-        let week:u64 = ctx.key().parse::<u64>()?;
-
-        info!("start week {}", week );
-
-        let mut archived_listing = get_archived_directory_listing(week).await?;
-        let current_listing = get_current_directory_listing(week).await?;
-
-        let mut file_archive_count = 0;
-        for (file_path, hash) in current_listing.files.iter() {
-
-            if !archived_listing.files.contains_key(file_path) ||
-                hash != archived_listing.files.get(file_path).unwrap()   {
-
-                let file_request = FileRequest {file_path:file_path.clone(), hash:hash.clone()};
-                let file_request_response = ctx.object_client::<CDDISArchiveFileClient>(file_path).download_file(Json(file_request)).call().await;
-
-                if file_request_response.is_ok() {
-                    archived_listing.files.insert(file_path.clone(), hash.clone());
-                    file_archive_count += 1;
-                }
-            }
-        }
-
-        ctx.set("total_files", archived_listing.files.len() as u64);
-        ctx.set("last_update", Epoch::now()?.to_gpst_seconds());
-        info!("finished week {}: {}/{} files archived, {} new/changed", week, archived_listing.files.len(), current_listing.files.len(), file_archive_count);
-
-        put_archived_directory_listing(week, &archived_listing).await?;
+        let mut archived_listing = get_archived_directory_listing(file_request.week).await?;
+        archived_listing.files.insert(file_request.file_path, file_request.hash);
+        put_archived_directory_listing(file_request.week, &archived_listing).await?;
 
         Ok(())
     }
