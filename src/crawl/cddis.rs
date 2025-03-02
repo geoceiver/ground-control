@@ -171,15 +171,16 @@ pub struct DownloadRequest {
 
 #[restate_sdk::object]
 pub trait CDDISArchiveFile {
-    async fn download_file(file_request:String) -> Result<(), HandlerError>;
+    async fn download_file() -> Result<(), HandlerError>;
 }
 
 pub struct CDDISArchiveFileImpl;
 
 impl CDDISArchiveFile for CDDISArchiveFileImpl {
 
-    async fn download_file(&self, _ctx: ObjectContext<'_>, file_path:String) -> Result<(), HandlerError> {
+    async fn download_file(&self, _ctx: ObjectContext<'_>) -> Result<(), HandlerError> {
 
+        let file_path = "2286/SIO0OPSFIN_20233080000_01D_01D_SOL.SNX.gz";
         info!("starting download: {}", file_path);
 
         let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
@@ -188,7 +189,7 @@ impl CDDISArchiveFile for CDDISArchiveFileImpl {
              .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?.bytes_stream();
 
 
-        let upload_url = s3_put_object_url(file_path.as_str());
+        let upload_url = s3_put_object_url(file_path);
 
         let mut size_bytes =0;
         let mut bytes:Vec<u8> = Vec::new();
@@ -225,13 +226,14 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
         let current_listing = ctx.run(||get_current_directory_listing(week)).await?.into_inner();
 
         let mut file_archive_count = 0;
+
         for (file_path, hash) in current_listing.files.iter() {
 
             if !archived_listing.files.contains_key(file_path) ||
                 hash != archived_listing.files.get(file_path).unwrap()   {
 
                 //let file_request = FileRequest {file_path:file_path.clone(), hash:hash.clone()};
-                ctx.object_client::<CDDISArchiveFileClient>(file_path).download_file(file_path.clone()).call().await?;
+                ctx.object_client::<CDDISArchiveFileClient>(file_path).download_file().call().await?;
 
                 archived_listing.files.insert(file_path.clone(), hash.clone());
                 file_archive_count += 1;
@@ -265,7 +267,6 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
         let last_update_started = ctx.run(||current_gpst_seconds()).await.unwrap();
         let current_week = ctx.run(||current_gpst_week()).await.unwrap();
         let download_request = download_request.into_inner();
-
 
         let first_week;
         if download_request.archive.is_some_and(|a|a==true) {
