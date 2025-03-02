@@ -74,24 +74,25 @@ async fn current_gpst_week() -> Result<u64, HandlerError> {
     Ok(gpst_week(&Epoch::now()?))
 }
 
-async fn get_archived_directory_listing(week:u64) -> Result<Json<DirectoryListing>, HandlerError> {
+async fn get_archived_directory_listing(week:u64) -> Result<DirectoryListing, HandlerError> {
 
     let listing_path = format!("{}/sha512.json", week);
 
     let listing_url = s3_get_object_url(listing_path.as_str());
 
-    let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+    let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
     let listing_response = client.get(listing_url).send().await;
 
     let archived_listing:DirectoryListing;
     if listing_response.is_ok() {
-        archived_listing = serde_json::from_str(listing_response.unwrap().text().await?.as_str())?;
-    }
-    else {
-        archived_listing = DirectoryListing::default();
+        let listing_response = listing_response.unwrap();
+        if listing_response.status().is_success() {
+            archived_listing = serde_json::from_str(listing_response.text().await?.as_str())?;
+            return Ok(archived_listing);
+        }
     }
 
-    Ok(Json(archived_listing))
+    Ok(DirectoryListing::default())
 }
 async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryListing) -> Result<(), HandlerError> {
 
@@ -99,7 +100,7 @@ async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryLis
 
     let listing_url = s3_put_object_url(listing_path.as_str());
 
-    let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+    let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
     let body = json!(archived_listing);
     client.put(listing_url).body(body.to_string()).send().await?;
 
@@ -107,9 +108,9 @@ async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryLis
     Ok(())
 }
 
-async fn get_current_directory_listing(week:u64) -> Result<Json<DirectoryListing>, HandlerError> {
+async fn get_current_directory_listing(week:u64) -> Result<DirectoryListing, HandlerError> {
 
-    let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+    let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
     let response = client.get(format!("{}/SHA512SUMS", get_cddis_week_path(week)))
         .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap())
         .send()
@@ -130,7 +131,7 @@ async fn get_current_directory_listing(week:u64) -> Result<Json<DirectoryListing
         }
     }
 
-    Ok(Json(directory_listing))
+    Ok(directory_listing)
 }
 
 //async fn copy_file_to_s3(file_request:&FileRequest) -> Result<(), anyhow::Error> {
@@ -220,7 +221,7 @@ impl CDDISArchiveFile for CDDISArchiveFileImpl {
 
         info!("starting download: {}", file_request.file_path);
 
-        let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+        let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
 
         let mut stream = client.get(get_cddis_file_path(&file_request.file_path))
              .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?.bytes_stream();
@@ -236,7 +237,7 @@ impl CDDISArchiveFile for CDDISArchiveFileImpl {
             bytes.append(&mut chunk.to_vec());
         }
 
-        let client = reqwest::Client::builder().pool_max_idle_per_host(0).build()?;
+        let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
         //let body = json!(archived_listing);
         client.put(upload_url).body(bytes).send().await?;
 
@@ -285,9 +286,8 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
         info!("start week {}", week );
 
-        let mut archived_listing = ctx.run(||get_archived_directory_listing(week)).await?.into_inner();
-        let current_listing = ctx.run(||get_current_directory_listing(week)).await?.into_inner();
-
+        let mut archived_listing = get_archived_directory_listing(week).await?;
+        let current_listing = get_current_directory_listing(week).await?;
 
         let mut file_archive_count = 0;
         for (file_path, hash) in current_listing.files.iter() {

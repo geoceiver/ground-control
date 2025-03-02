@@ -11,7 +11,7 @@ dotenvy = "0.15.7"
 futures = "0.3.31"
 futures-util = "0.3.31"
 hifitime = {version = "4.0.2", features = ["std"]}
-reqwest = {version = "0.12.12", features=["stream"]}
+reqwest = {version = "0.12.12", features=["stream", "rustls-tls"]}
 restate-sdk = "0.3.2"
 rkyv = "0.8.10"
 rusty-s3 = "0.7.0"
