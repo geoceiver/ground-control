@@ -26,6 +26,6 @@ tracing-subscriber = "0.3.19"
 uuid = {version ="1.13.1", features = ["v5"]}
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = {version = "0.6", features = ["alloc_trait"]}
+tikv-jemallocator =  "0.6"
 
 [dev-dependencies]

@@ -3,7 +3,7 @@ use std::env;
 use std::{fmt::Debug, time::Duration};
 use futures::StreamExt;
 use hifitime::Epoch;
-use reqwest::Url;
+use reqwest::{Body, Url};
 use restate_sdk::prelude::*;
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use serde::{Deserialize, Serialize};
@@ -249,25 +249,15 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
         let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
 
-        let mut stream = client.get(get_cddis_file_path(&file_request.file_path))
+        let stream = client.get(get_cddis_file_path(&file_request.file_path))
              .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?.bytes_stream();
 
+        let body_stream = Body::wrap_stream(stream);
 
         let upload_url = s3_put_object_url(file_request.file_path.as_str());
 
-        let mut size_bytes =0;
-        let mut bytes:Vec<u8> = Vec::new();
-        while let Some(item) = stream.next().await {
-            let chunk = item?;
-            size_bytes += chunk.len();
-            bytes.append(&mut chunk.to_vec());
-        }
-
         let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
-        //let body = json!(archived_listing);
-        client.put(upload_url).body(bytes).send().await?;
-
-        info!("finished download: {}, {} bytes", file_request.file_path, size_bytes);
+        client.post(upload_url).body(body_stream).send().await?;
 
         let mut archived_listing = get_archived_directory_listing(file_request.week).await?;
         archived_listing.files.insert(file_request.file_path, file_request.hash);
