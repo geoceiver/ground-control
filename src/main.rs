@@ -9,7 +9,7 @@ mod objects;
 mod crawl;
 use restate_sdk::prelude::*;
 use objects::sv::{SVImpl, SV};
-use crawl::cddis::CDDISArchiveWeek, CDDISArchiveWeekImpl, CDDISArchiveWorkflow, CDDISArchiveWorkflowImpl};
+use crawl::cddis::{CDDISArchiveWeek, CDDISArchiveWeekImpl, CDDISArchiveWorkflow, CDDISArchiveWorkflowImpl};
 
 #[tokio::main]
 async fn main() {
