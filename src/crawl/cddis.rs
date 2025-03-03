@@ -257,8 +257,12 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
         let upload_url = s3_put_object_url(file_request.file_path.as_str());
 
         let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
-        client.post(upload_url).body(body_stream).send().await?;
+        let mut response_stream = client.post(upload_url).body(body_stream).send().await?.bytes_stream();
 
+        while let Some(_) = response_stream.next().await {
+                //let chunk = chunk?;
+                //io::stdout().write_all(&chunk).await?;
+        }
         info!("uploaded file: {}", file_request.file_path);
 
         let mut archived_listing = get_archived_directory_listing(file_request.week).await?;
