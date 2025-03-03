@@ -277,8 +277,6 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 #[restate_sdk::workflow]
 pub trait CDDISArchiveWorkflow {
     async fn run(directory: Json<DownloadRequest>) -> Result<(), HandlerError>;
-
-    async fn download_weeks(weeks: Json<WeekList>) -> Result<(), HandlerError>;
 }
 
 pub struct CDDISArchiveWorkflowImpl;
@@ -291,7 +289,6 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
         let current_week = ctx.run(||current_gpst_week()).await.unwrap();
         let download_request = download_request.into_inner();
 
-
         let first_week;
         if download_request.archive.is_some_and(|a|a==true) {
             first_week = MIN_GPST_WEEKS;
@@ -300,39 +297,10 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
             first_week = current_week - WEEK_LOOKBACK_PERIOD;
         }
 
-        let weeks:Vec<u64> = (first_week..current_week).collect();
+        let weeks:Vec<u64> = (first_week..=current_week).collect();
 
-        let parallelism:usize;
-        if download_request.parallelism.is_some_and(|p| p > 0) {
-            parallelism = download_request.parallelism.unwrap() as usize;
-        }
-        else {
-            parallelism = 1;
-        }
-
-        let week_chunks:Vec<Vec<u64>> = weeks.chunks(weeks.len() / parallelism).map(|chunk| chunk.to_vec()).collect();
-
-        let mut job_status_list = Vec::new();
-        for parallel_job in 0..parallelism {
-
-            let job_weeks = week_chunks.get(parallel_job).unwrap().clone();
-
-            info!("starting job {} with weeks: {}", parallel_job,
-                job_weeks.iter()
-                .map(|x|x.to_string()).collect::<Vec<String>>().join(","));
-
-            let download_uuid = ctx.rand_uuid();
-
-            let promise = ctx.workflow_client::<CDDISArchiveWorkflowClient>(download_uuid)
-                .download_weeks(Json(WeekList::new(job_weeks))).call();
-
-            job_status_list.push(promise);
-
-        }
-
-        // rust sdk only supports sequential awaits on promises
-        for promise in job_status_list {
-            let _ = promise.await; // allow failures but need to log/re-try out of workflow?
+        for week in weeks {
+            ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_week().call().await?;
         }
 
         let last_update_completed = ctx.run(||current_gpst_seconds()).await.unwrap();
@@ -354,15 +322,15 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
         Ok(())
     }
 
-    async fn download_weeks(&self, ctx: WorkflowContext<'_>, weeks: Json<WeekList>) -> Result<(), HandlerError> {
+    // async fn download_weeks(&self, ctx: WorkflowContext<'_>, weeks: Json<WeekList>) -> Result<(), HandlerError> {
 
-        let weeks = weeks.into_inner();
+    //     let weeks = weeks.into_inner();
 
-        for week in weeks.weeks {
-            ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_week().call().await?;
-        }
+    //     for week in weeks.weeks {
+    //         ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_week().call().await?;
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
 }

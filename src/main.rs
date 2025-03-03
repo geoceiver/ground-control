@@ -9,8 +9,7 @@ mod objects;
 mod crawl;
 use restate_sdk::prelude::*;
 use objects::sv::{SVImpl, SV};
-use crawl::cddis::{CDDISArchiveWeek, CDDISArchiveWeekImpl, CDDISArchiveWorkflow, CDDISArchiveWorkflowImpl};
-//use tracing::info;
+use crawl::cddis::CDDISArchiveWeek, CDDISArchiveWeekImpl, CDDISArchiveWorkflow, CDDISArchiveWorkflowImpl};
 
 #[tokio::main]
 async fn main() {
@@ -23,8 +22,6 @@ async fn main() {
         tracing::info!("Failed to load keys from .env file: {}", loaded_env.err().unwrap());
         std::process::exit(1);
     }
-
-    //info!("EARTHDATA_TOKEN {}", std::env::var("EARTHDATA_TOKEN").unwrap_or_else(|_| "not set".to_string()));
 
     HttpServer::new(
         Endpoint::builder()
