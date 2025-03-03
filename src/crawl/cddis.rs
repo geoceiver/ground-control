@@ -259,6 +259,8 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
         let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
         client.post(upload_url).body(body_stream).send().await?;
 
+        info!("uploaded file: {}", file_request.file_path);
+
         let mut archived_listing = get_archived_directory_listing(file_request.week).await?;
         archived_listing.files.insert(file_request.file_path, file_request.hash);
         put_archived_directory_listing(file_request.week, &archived_listing).await?;
