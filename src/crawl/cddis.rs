@@ -14,7 +14,7 @@ use tracing::info;
 
 const MIN_GPST_WEEKS: u64 = 2238; // CDDIS format changed for products prior to week 2238
 const WEEK_LOOKBACK_PERIOD: u64 = 12; // Look back 12 weeks for updated productss
-const UPDATE_FREQUENCY:f64 = 30.0; //60 * 10; // update every ten minutes
+const UPDATE_FREQUENCY:f64 = 60.0 * 10.0; // update every ten minutes
 const CDDIS_PATH:&str = "https://cddis.nasa.gov/archive/gnss/products";
 
 fn s3_bucket() -> Bucket {
