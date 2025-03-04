@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::{fmt::Debug, time::Duration};
-use futures::StreamExt;
 use hifitime::Epoch;
 use reqwest::{Body, Url};
 use restate_sdk::prelude::*;
@@ -257,12 +256,9 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
         let upload_url = s3_put_object_url(file_request.file_path.as_str());
 
         let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
-        let mut response_stream = client.put(upload_url).body(body_stream).send().await?; //.bytes_stream();
+        client.put(upload_url).body(body_stream).send().await?;
 
-        // while let Some(_) = response_stream.next().await {
-        //         //let chunk = chunk?;
-        //         //io::stdout().write_all(&chunk).await?;
-        // }
+
         info!("uploaded file: {}", file_request.file_path);
 
         let mut archived_listing = get_archived_directory_listing(file_request.week).await?;
@@ -297,7 +293,7 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
             first_week = current_week - WEEK_LOOKBACK_PERIOD;
         }
 
-        let weeks:Vec<u64> = (first_week..=current_week).collect();
+        let weeks:Vec<u64> = (first_week..=current_week).rev().collect();
 
         for week in weeks {
             ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_week().call().await?;
