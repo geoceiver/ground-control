@@ -1,7 +1,12 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::{fmt::Debug, time::Duration};
+use bytes::buf::Reader;
+use bytes::{Buf, Bytes};
+use flate2::bufread::GzDecoder;
+use std::io::BufReader;
 use hifitime::Epoch;
+use regex::Regex;
 use reqwest::{Body, Url};
 use restate_sdk::prelude::*;
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
@@ -10,11 +15,18 @@ use serde_json::json;
 use serde_with::serde_as;
 use tracing::info;
 
+use crate::data::sources::{OrbitSourceClient, OrbitSourceSP3};
+
 
 const MIN_GPST_WEEKS: u64 = 2238; // CDDIS format changed for products prior to week 2238
 const WEEK_LOOKBACK_PERIOD: u64 = 12; // Look back 12 weeks for updated productss
 const UPDATE_FREQUENCY:f64 = 60.0 * 10.0; // update every ten minutes
 const CDDIS_PATH:&str = "https://cddis.nasa.gov/archive/gnss/products";
+
+pub fn cddis_path_parser(path:&str) -> Option<regex::Captures<'_>> {
+    let re = Regex::new(r"^(?<WEEK>\d{4})\/(?<AC>.{3})0(?<PROJ>.{3})(?<TYP>.{3})_(?<TIME>[0-9]{11})_(?<PER>.*)_(?<SMP>.*)_(?<CNT>.*)\.(?<FMT>.*)\.gz$").unwrap();
+    return re.captures(path);
+}
 
 fn s3_bucket() -> Bucket {
     // setting up a bucket
@@ -32,7 +44,7 @@ fn s3_credentials() -> Credentials {
     Credentials::new(key, secret)
 }
 
-fn s3_get_object_url(path:&str) -> Url {
+pub fn s3_get_object_url(path:&str) -> Url {
     let bucket = s3_bucket();
     let credentials = s3_credentials();
 
@@ -41,13 +53,29 @@ fn s3_get_object_url(path:&str) -> Url {
     get_object.sign(presigned_url_duration)
 }
 
-fn s3_put_object_url(path:&str) -> Url {
+pub async fn s3_get_gz_object_buffer(path:&str) -> Result<BufReader<GzDecoder<Reader<Bytes>>>, anyhow::Error>  {
+
+    let sp3_url = s3_get_object_url(path);
+    let client = build_reqwest_client()?;
+    let sp3_request = client.get(sp3_url).send().await?;
+    let sp3_reader = sp3_request.bytes().await?.reader();
+    let fd = GzDecoder::new(sp3_reader);
+
+    let buf = BufReader::new(fd);
+    return Ok(buf);
+}
+
+pub fn s3_put_object_url(path:&str) -> Url {
     let bucket = s3_bucket();
     let credentials = s3_credentials();
 
     let get_object = bucket.put_object(Some(&credentials), path);
     let presigned_url_duration = Duration::from_secs(60);
     get_object.sign(presigned_url_duration)
+}
+
+pub fn build_reqwest_client() -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()
 }
 
 pub fn gpst_week(epoch:&Epoch) -> u64 {
@@ -79,7 +107,7 @@ async fn get_archived_directory_listing(week:u64) -> Result<DirectoryListing, Ha
 
     let listing_url = s3_get_object_url(listing_path.as_str());
 
-    let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
+    let client = build_reqwest_client()?;
     let listing_response = client.get(listing_url).send().await;
 
     let archived_listing:DirectoryListing;
@@ -99,7 +127,7 @@ async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryLis
 
     let listing_url = s3_put_object_url(listing_path.as_str());
 
-    let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
+    let client = build_reqwest_client()?;
     let body = json!(archived_listing);
     client.put(listing_url).body(body.to_string()).send().await?;
 
@@ -109,7 +137,7 @@ async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryLis
 
 async fn get_current_directory_listing(week:u64) -> Result<DirectoryListing, HandlerError> {
 
-    let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
+    let client = build_reqwest_client()?;
     let response = client.get(format!("{}/SHA512SUMS", get_cddis_week_path(week)))
         .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap())
         .send()
@@ -240,13 +268,13 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
         Ok(())
     }
 
-    async fn download_file(&self, _ctx: ObjectContext<'_>, file_request: Json<FileRequest>) -> Result<(), HandlerError> {
+    async fn download_file(&self, ctx: ObjectContext<'_>, file_request: Json<FileRequest>) -> Result<(), HandlerError> {
 
         let file_request = file_request.into_inner();
 
         info!("starting download: {}", file_request.file_path);
 
-        let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
+        let client = build_reqwest_client()?;
 
         let stream = client.get(get_cddis_file_path(&file_request.file_path))
              .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?.bytes_stream();
@@ -255,15 +283,35 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
         let upload_url = s3_put_object_url(file_request.file_path.as_str());
 
-        let client = reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()?;
+        let client = build_reqwest_client()?;
         client.put(upload_url).body(body_stream).send().await?;
 
 
         info!("uploaded file: {}", file_request.file_path);
 
         let mut archived_listing = get_archived_directory_listing(file_request.week).await?;
-        archived_listing.files.insert(file_request.file_path, file_request.hash);
+        archived_listing.files.insert(file_request.file_path.to_string(), file_request.hash);
         put_archived_directory_listing(file_request.week, &archived_listing).await?;
+
+        let path_parts = cddis_path_parser(file_request.file_path.as_str());
+
+        if path_parts.is_some() {
+            let path_parts  = path_parts.unwrap();
+            if path_parts["CNT"].eq("ORB") && path_parts["FMT"].eq("SP3") {
+                let sp3_file = OrbitSourceSP3 {
+                    path:file_request.file_path.clone(),
+                    ac:path_parts["AC"].to_string(),
+                    solution:path_parts["TYP"].to_string(),
+                    solution_time:path_parts["TIME"].to_string(),
+                    source:"CDDIS".to_string(),
+                    collected_at: Epoch::now()?.to_gpst_seconds(),
+                    sv_coverage: None
+                };
+
+                ctx.object_client::<OrbitSourceClient>(sp3_file.get_source_key())
+                    .process_sp3(Json(sp3_file)).send();
+            }
+        }
 
         Ok(())
     }
@@ -296,7 +344,7 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
         let weeks:Vec<u64> = (first_week..=current_week).rev().collect();
 
         for week in weeks {
-            ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_week().call().await?;
+            ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_week().send();
         }
 
         let last_update_completed = ctx.run(||current_gpst_seconds()).await.unwrap();

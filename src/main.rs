@@ -6,10 +6,10 @@ use tikv_jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 
 mod objects;
-mod crawl;
+mod data;
 use restate_sdk::prelude::*;
 use objects::sv::{SVImpl, SV};
-use crawl::cddis::{CDDISArchiveWeek, CDDISArchiveWeekImpl, CDDISArchiveWorkflow, CDDISArchiveWorkflowImpl};
+use data::{cddis::{CDDISArchiveWeek, CDDISArchiveWeekImpl, CDDISArchiveWorkflow, CDDISArchiveWorkflowImpl}, sources::{OrbitSource, OrbitSourceImpl}};
 
 #[tokio::main]
 async fn main() {
@@ -27,6 +27,7 @@ async fn main() {
         Endpoint::builder()
             .bind(CDDISArchiveWorkflowImpl.serve())
             .bind(CDDISArchiveWeekImpl.serve())
+            .bind(OrbitSourceImpl.serve())
             .bind(SVImpl.serve())
             .build(),
     )
