@@ -297,7 +297,7 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
         if path_parts.is_some() {
             let path_parts  = path_parts.unwrap();
-            if path_parts["CNT"].eq("ORB") && path_parts["FMT"].eq("SP3") {
+            if path_parts["TYP"].eq("ULT") && path_parts["CNT"].eq("ORB") && path_parts["FMT"].eq("SP3") {
                 let sp3_file = OrbitSourceSP3 {
                     path:file_request.file_path.clone(),
                     ac:path_parts["AC"].to_string(),
