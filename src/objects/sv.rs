@@ -298,8 +298,8 @@ impl SV for SVImpl {
         let current_orbits = ctx.get::<Json<Orbits>>(&orbits_key).await?;
         if current_orbits.is_some() {
             let current_orbits = current_orbits.unwrap().into_inner();
-            if current_orbits.period >= new_orbits.period {
-                info!("new {} ({}) orbits older than existing orbits: {} <= {}", sv, orbits_key, new_orbits.solution_time, current_orbits.solution_time);
+            if current_orbits.solution_time >= new_orbits.solution_time {
+                info!("new {} ({}) orbits older than existing orbits: {} >= {}", sv, orbits_key, current_orbits.solution_time, new_orbits.solution_time);
                 return Ok(());
             }
         }
