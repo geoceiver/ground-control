@@ -7,19 +7,20 @@ use tracing::info;
 use crate::{data::cddis::s3_get_gz_object_buffer, objects::sv::{Orbit, Orbits, SVClient}};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone)]
-pub struct OrbitSourceSP3 {
+pub struct RinexSource {
     pub path:String,
     pub ac:String,
     pub solution: String,
     pub solution_time: String,
+    pub content_type: String,
     pub source: String,
     pub collected_at:f64,
     pub sv_coverage:Option<HashSet<String>>
 }
 
-impl OrbitSourceSP3 {
+impl RinexSource {
     pub fn get_source_key(&self) -> String {
-        format!("{}_{}_{}", self.source, self.ac, self.solution)
+        format!("{}_{}_{}_{}", self.source, self.ac, self.solution, self.content_type)
     }
 }
 
@@ -27,16 +28,16 @@ impl OrbitSourceSP3 {
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone)]
 pub struct Sources {
     #[serde_as(as = "Vec<(_, _)>")]
-    pub sp3_sources:HashMap<String, OrbitSourceSP3>
+    pub sp3_sources:HashMap<String, RinexSource>
 }
 
 #[restate_sdk::object]
 pub trait OrbitSource {
     #[name = "processSp3"]
-    async fn process_sp3(source_file:Json<OrbitSourceSP3>) -> Result<(), HandlerError>;
+    async fn process_sp3(source_file:Json<RinexSource>) -> Result<(), HandlerError>;
 
     #[name = "updateSp3Sources"]
-    async fn update_sp3_sources(source_file:Json<OrbitSourceSP3>) -> Result<(), HandlerError>;
+    async fn update_sp3_sources(source_file:Json<RinexSource>) -> Result<(), HandlerError>;
 
     #[shared]
     async fn sources() -> Result<Json<Sources>, HandlerError>;
@@ -51,7 +52,7 @@ impl OrbitSource  for OrbitSourceImpl {
         Ok(sources)
     }
 
-    async fn update_sp3_sources(&self, ctx: ObjectContext<'_>, source_file:Json<OrbitSourceSP3>) -> Result<(),HandlerError> {
+    async fn update_sp3_sources(&self, ctx: ObjectContext<'_>, source_file:Json<RinexSource>) -> Result<(),HandlerError> {
 
         let source_file = source_file.into_inner();
         let mut sources = ctx.get::<Json<Sources>>("sources").await?.unwrap_or(Json(Sources {sp3_sources:HashMap::new()})).into_inner();
@@ -62,7 +63,7 @@ impl OrbitSource  for OrbitSourceImpl {
         Ok(())
     }
 
-    async fn process_sp3(&self, ctx: ObjectContext<'_>, source_file:Json<OrbitSourceSP3>) -> Result<(), HandlerError> {
+    async fn process_sp3(&self, ctx: ObjectContext<'_>, source_file:Json<RinexSource>) -> Result<(), HandlerError> {
 
         let mut source_file = source_file.into_inner();
 
@@ -125,9 +126,7 @@ impl OrbitSource  for OrbitSourceImpl {
         }
 
         source_file.sv_coverage = Some(sv_coverage);
-        info!("sv coverage: {:?}", &source_file);
         ctx.set("current_coverage", Json(source_file.clone()));
-
         ctx.object_client::<OrbitSourceClient>("current").update_sp3_sources(Json(source_file.clone())).send();
 
         Ok(())

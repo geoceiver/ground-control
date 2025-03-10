@@ -1,13 +1,14 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::{fmt::Debug, time::Duration};
+use anyhow::anyhow;
 use bytes::buf::Reader;
 use bytes::{Buf, Bytes};
 use flate2::bufread::GzDecoder;
 use std::io::BufReader;
 use hifitime::Epoch;
 use regex::Regex;
-use reqwest::{Body, Url};
+use reqwest::{Body, StatusCode, Url};
 use restate_sdk::prelude::*;
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use serde::{Deserialize, Serialize};
@@ -15,7 +16,7 @@ use serde_json::json;
 use serde_with::serde_as;
 use tracing::info;
 
-use crate::data::sources::{OrbitSourceClient, OrbitSourceSP3};
+use crate::data::sources::{OrbitSourceClient, RinexSource};
 
 
 const MIN_GPST_WEEKS: u64 = 2238; // CDDIS format changed for products prior to week 2238
@@ -101,25 +102,26 @@ async fn current_gpst_week() -> Result<u64, HandlerError> {
     Ok(gpst_week(&Epoch::now()?))
 }
 
-async fn get_archived_directory_listing(week:u64) -> Result<DirectoryListing, HandlerError> {
+async fn get_archived_directory_listing(week:u64) -> Result<DirectoryListing, anyhow::Error> {
 
     let listing_path = format!("{}/sha512.json", week);
 
     let listing_url = s3_get_object_url(listing_path.as_str());
 
     let client = build_reqwest_client()?;
-    let listing_response = client.get(listing_url).send().await;
+    let listing_response = client.get(listing_url).send().await?;
 
     let archived_listing:DirectoryListing;
-    if listing_response.is_ok() {
-        let listing_response = listing_response.unwrap();
-        if listing_response.status().is_success() {
-            archived_listing = serde_json::from_str(listing_response.text().await?.as_str())?;
-            return Ok(archived_listing);
-        }
+    let status_code = listing_response.status();
+    if status_code.is_success() {
+        archived_listing = serde_json::from_str(listing_response.text().await?.as_str())?;
+        return Ok(archived_listing);
+    }
+    else if status_code == StatusCode::NOT_FOUND {
+        return Ok(DirectoryListing::default());
     }
 
-    Ok(DirectoryListing::default())
+    return Err( anyhow!("Unable to load archived directory listing."));
 }
 async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryListing) -> Result<(), HandlerError> {
 
@@ -130,7 +132,6 @@ async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryLis
     let client = build_reqwest_client()?;
     let body = json!(archived_listing);
     client.put(listing_url).body(body.to_string()).send().await?;
-
 
     Ok(())
 }
@@ -160,44 +161,6 @@ async fn get_current_directory_listing(week:u64) -> Result<DirectoryListing, Han
 
     Ok(directory_listing)
 }
-
-//async fn copy_file_to_s3(file_request:&FileRequest) -> Result<(), anyhow::Error> {
-
-
-    // let client = reqwest::Client::new();
-
-    // let response = client.get(get_cddis_file_path(&file_request.file_path))
-    //     .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).
-
-    // let response = client.put(get_cddis_file_path(&file_request.file_path))
-    //     .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).await
-
-    // let url = "http://localhost:9000".parse().unwrap();
-    //     let key = "minioadmin";
-    //     let secret = "minioadmin";
-    //     let region = "minio";
-
-    //     let bucket = Bucket::new(url, UrlStyle::Path, "test", region).unwrap();
-    //     let credential = Credentials::new(key, secret);
-
-    //     let mut action = GetObject::new(&bucket, Some(&credential), "img.jpg");
-    //     action
-    //         .query_mut()
-    //         .insert("response-cache-control", "no-cache, no-store");
-    //     let signed_url = action.sign(ONE_HOUR);
-
-    // let response_bytes = response.bytes().await?;
-
-    // let hash = Sha512::digest(&response_bytes);
-    // let hex_hash = base16ct::lower::encode_string(&hash);
-
-    // if !hex_hash.eq(&file_request.hash) {
-    //     error!("File hash mismatch for {}", &file_request.file_path);
-    //     return Err(anyhow!("Hash mismatch"));
-    // }
-
-//     Ok(())
-// }
 
 #[serde_as]
 #[derive(Default, Serialize, Deserialize, Debug)]
@@ -286,7 +249,6 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
         let client = build_reqwest_client()?;
         client.put(upload_url).body(body_stream).send().await?;
 
-
         info!("uploaded file: {}", file_request.file_path);
 
         let mut archived_listing = get_archived_directory_listing(file_request.week).await?;
@@ -297,19 +259,19 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
         if path_parts.is_some() {
             let path_parts  = path_parts.unwrap();
+            let rinex_file = RinexSource {
+                path:file_request.file_path.clone(),
+                ac:path_parts["AC"].to_string(),
+                solution:path_parts["TYP"].to_string(),
+                solution_time:path_parts["TIME"].to_string(),
+                content_type:path_parts["CNT"].to_string(),
+                source:"CDDIS".to_string(),
+                collected_at: Epoch::now()?.to_gpst_seconds(),
+                sv_coverage: None
+            };
             if path_parts["TYP"].eq("ULT") && path_parts["CNT"].eq("ORB") && path_parts["FMT"].eq("SP3") {
-                let sp3_file = OrbitSourceSP3 {
-                    path:file_request.file_path.clone(),
-                    ac:path_parts["AC"].to_string(),
-                    solution:path_parts["TYP"].to_string(),
-                    solution_time:path_parts["TIME"].to_string(),
-                    source:"CDDIS".to_string(),
-                    collected_at: Epoch::now()?.to_gpst_seconds(),
-                    sv_coverage: None
-                };
-
-                ctx.object_client::<OrbitSourceClient>(sp3_file.get_source_key())
-                    .process_sp3(Json(sp3_file)).send();
+                ctx.object_client::<OrbitSourceClient>(rinex_file.get_source_key())
+                    .process_sp3(Json(rinex_file)).send();
             }
         }
 

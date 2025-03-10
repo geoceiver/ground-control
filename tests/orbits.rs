@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use ground_control::{data::{cddis::s3_get_gz_object_buffer, sources::{OrbitSource, OrbitSourceImpl, OrbitSourceSP3, Sources}}, objects::sv::{Orbit, SVImpl, DEFAULT_INTERPOLATION_ORDER, SV as _}};
+use ground_control::{data::{cddis::s3_get_gz_object_buffer, sources::{OrbitSource, OrbitSourceImpl, RinexSource, Sources}}, objects::sv::{Orbit, SVImpl, DEFAULT_INTERPOLATION_ORDER, SV as _}};
 use hifitime::Epoch;
 use restate_sdk::{prelude::Endpoint, serde::{Json, Serialize}};
 use restate_sdk_test_env::TestContainer;
@@ -63,11 +63,12 @@ async fn test_container() {
 
     let path = "2356/COD0OPSULT_20250640000_02D_05M_ORB.SP3.gz";
 
-    let source = OrbitSourceSP3 {
+    let source = RinexSource {
         path:path.to_string(),
         ac:"COD".to_string(),
         solution:"ULT".to_string(),
         solution_time:"20250640000".to_string(),
+        content_type: "ORB".to_string(),
         source:"CDDIS".to_string(),
         collected_at: 10.0,
         sv_coverage: None
