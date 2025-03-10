@@ -66,6 +66,8 @@ impl OrbitSource  for OrbitSourceImpl {
 
         let mut source_file = source_file.into_inner();
 
+        info!("processing: {:?}", source_file);
+
         let mut sp3_buf_reader = s3_get_gz_object_buffer(source_file.path.as_str()).await?;
         let sp3 = SP3::from_reader(&mut sp3_buf_reader)?;
 
