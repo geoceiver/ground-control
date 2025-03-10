@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use hifitime::Epoch;
-use restate_sdk::{errors::HandlerError, prelude::{ContextClient, ContextReadState, ContextWriteState, ObjectContext, SharedObjectContext}, serde::Json};
+use restate_sdk::{errors::{HandlerError, TerminalError}, prelude::{ContextClient, ContextReadState, ContextWriteState, ObjectContext, SharedObjectContext}, serde::Json};
 use serde_with::serde_as;
 use sp3::{prelude::SV, SP3};
-use tracing::info;
+use tracing::{error, info};
 use crate::{data::cddis::s3_get_gz_object_buffer, objects::sv::{Orbit, Orbits, SVClient}};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone)]
@@ -70,7 +70,15 @@ impl OrbitSource  for OrbitSourceImpl {
         info!("processing: {:?}", source_file);
 
         let mut sp3_buf_reader = s3_get_gz_object_buffer(source_file.path.as_str()).await?;
-        let sp3 = SP3::from_reader(&mut sp3_buf_reader)?;
+        let sp3 = SP3::from_reader(&mut sp3_buf_reader);
+
+        if sp3.is_err() {
+            let err = sp3.err().unwrap();
+            error!("unable tp process {}: {}", source_file.path, err);
+            return Err(TerminalError::new(format!("unable tp process {}: {}", source_file.path, err).to_string()).into());
+        }
+
+        let sp3 = sp3.unwrap();
 
         if !sp3.has_steady_sampling() {
             // TODO handle invalid SP3 sampling
