@@ -71,7 +71,6 @@ impl OrbitSource  for OrbitSourceImpl {
 
         let mut sp3_buf_reader = s3_get_gz_object_buffer(source_file.path.as_str()).await?;
         let sp3 = SP3::from_reader(&mut sp3_buf_reader);
-
         if sp3.is_err() {
             let err = sp3.err().unwrap();
             error!("unable tp process {}: {}", source_file.path, err);
@@ -79,6 +78,9 @@ impl OrbitSource  for OrbitSourceImpl {
         }
 
         let sp3 = sp3.unwrap();
+
+        info!("header: {}", sp3.header.version);
+        info!("header: {:?}", sp3.header.satellites);
 
         if !sp3.has_steady_sampling() {
             // TODO handle invalid SP3 sampling

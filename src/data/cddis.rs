@@ -6,7 +6,7 @@ use bytes::buf::Reader;
 use bytes::{Buf, Bytes};
 use flate2::bufread::GzDecoder;
 use reqwest::header::ACCEPT_ENCODING;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use hifitime::Epoch;
 use regex::Regex;
 use reqwest::{Body, StatusCode, Url};
@@ -15,7 +15,7 @@ use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::serde_as;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::data::sources::{OrbitSourceClient, RinexSource};
 
@@ -60,11 +60,15 @@ pub async fn s3_get_gz_object_buffer(path:&str) -> Result<BufReader<GzDecoder<Re
     let sp3_url = s3_get_object_url(path);
     let client = build_reqwest_client()?;
     let sp3_request = client.get(sp3_url).header(ACCEPT_ENCODING, "gzip").send().await?;
-    let sp3_reader = sp3_request.bytes().await?.reader();
-    let fd = GzDecoder::new(sp3_reader);
+    if sp3_request.status().is_success() {
+        let sp3_reader = sp3_request.bytes().await?.reader();
+        let fd = GzDecoder::new(sp3_reader);
+        let buf = BufReader::new(fd);
+        return Ok(buf);
+    }
 
-    let buf = BufReader::new(fd);
-    return Ok(buf);
+    error!("File not found: {}", path);
+    Err(anyhow!("File not found: {}", path))
 }
 
 pub fn s3_put_object_url(path:&str) -> Url {
@@ -221,7 +225,8 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
         for (file_path, hash) in current_listing.files.iter() {
 
             if !archived_listing.files.contains_key(file_path) ||
-                hash != archived_listing.files.get(file_path).unwrap()   {
+                hash != archived_listing.files.get(file_path).unwrap() ||
+                file_path.contains("SP3") {
 
                 let file_request = FileRequest {file_path:file_path.clone(), hash:hash.clone(), week};
                 ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_file(Json(file_request)).send();
