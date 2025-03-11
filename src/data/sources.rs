@@ -3,7 +3,7 @@ use hifitime::Epoch;
 use restate_sdk::{errors::{HandlerError, TerminalError}, prelude::{ContextClient, ContextReadState, ContextWriteState, ObjectContext, SharedObjectContext}, serde::Json};
 use serde_with::serde_as;
 use sp3::{prelude::SV, SP3};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use crate::{data::cddis::s3_get_gz_object_buffer, objects::sv::{Orbit, Orbits, SVClient}};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone)]
@@ -67,11 +67,6 @@ impl OrbitSource  for OrbitSourceImpl {
 
         let mut source_file = source_file.into_inner();
 
-        if !source_file.path.starts_with("2357") {
-            info!("skipping sp3 pre-week 2357");
-            return Ok(());
-        }
-
         info!("processing: {:?}", source_file);
 
         let mut sp3_buf_reader = s3_get_gz_object_buffer(source_file.path.as_str()).await?;
@@ -91,14 +86,7 @@ impl OrbitSource  for OrbitSourceImpl {
 
         let valid_from = sp3.first_epoch().to_gpst_seconds();
 
-        let valid_to;
-
-        if sp3.last_epoch().is_some() {
-            valid_to = sp3.last_epoch().unwrap().to_gpst_seconds();
-        }
-        else {
-            valid_to = 0.0;
-        }
+        let mut valid_to:f64 = 0.0;
 
         let period = (valid_to - valid_from) / (sp3.total_epochs() - 1) as f64;
 
@@ -110,9 +98,18 @@ impl OrbitSource  for OrbitSourceImpl {
             for (epoch, sv, offset) in sp3.satellites_clock_offset_sec_iter() {
                 let sv_id = sv.to_string();
                 sv_clocks.insert((sv_id, epoch), offset);
+
+                let epoch_gpst_seconds = epoch.to_gpst_seconds();
+                if valid_to < epoch_gpst_seconds {
+                    valid_to = epoch_gpst_seconds;
+                }
             }
         }
 
+        if valid_to == 0.0 {
+            warn!("sp3 with zero epochs: {}", source_file.path);
+            valid_to = valid_from;
+        }
 
         let mut sv_orbits:HashMap<String, Orbits> = HashMap::new();
         for (epoch, sv, (x, y, z)) in sp3.satellites_position_km_iter() {
