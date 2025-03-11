@@ -31,10 +31,10 @@ pub fn cddis_path_parser(path:&str) -> Option<regex::Captures<'_>> {
 
 fn s3_bucket() -> Bucket {
     // setting up a bucket
-    let endpoint = "https://ewr1.vultrobjects.com".parse().expect("endpoint is a valid Url");
+    let endpoint = "https://35bb40698ef5bd005fe8af515201e351.r2.cloudflarestorage.com".parse().expect("endpoint is a valid Url");
     let path_style = UrlStyle::VirtualHost;
-    let name = "cddis-archive";
-    let region = "vultr-ewr1-1";
+    let name = "cddis-deep-archive";
+    let region = "enam";
     Bucket::new(endpoint, path_style, name, region).expect("Url has a valid scheme and host")
 }
 
