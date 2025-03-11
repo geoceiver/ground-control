@@ -90,7 +90,16 @@ impl OrbitSource  for OrbitSourceImpl {
         }
 
         let valid_from = sp3.first_epoch().to_gpst_seconds();
-        let valid_to = sp3.last_epoch().unwrap().to_gpst_seconds();
+
+        let valid_to;
+
+        if sp3.last_epoch().is_some() {
+            valid_to = sp3.last_epoch().unwrap().to_gpst_seconds();
+        }
+        else {
+            valid_to = 0.0;
+        }
+
         let period = (valid_to - valid_from) / (sp3.total_epochs() - 1) as f64;
 
         info!("{}: {} - {} ({})", source_file.source, valid_from, valid_to, period);
