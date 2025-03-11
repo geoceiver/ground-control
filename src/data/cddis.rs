@@ -255,10 +255,11 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
         let result = client.put(upload_url).body(bytes).send().await?;
 
         if ! result.status().is_success() {
-            error!("failed to upload file: {:?}", result.error_for_status_ref());
-            let response = result.text().await?;
-            error!("response: {}", response);
+            error!("failed to upload file: {:?}", result.error_for_status_ref())
         }
+
+        let response = result.text().await?;
+        error!("response texts: {}", response);
 
         info!("uploaded file: {}", file_request.file_path);
 
