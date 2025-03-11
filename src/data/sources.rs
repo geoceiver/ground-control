@@ -90,8 +90,6 @@ impl OrbitSource  for OrbitSourceImpl {
 
         let period = (valid_to - valid_from) / (sp3.total_epochs() - 1) as f64;
 
-        info!("{}: {} - {} ({})", source_file.source, valid_from, valid_to, period);
-        //let frame = IAU_EARTH_FRAME;
 
         let mut sv_clocks:HashMap<(String, Epoch), f64> = HashMap::new();
         if sp3.has_satellite_clock_offset() {
@@ -110,6 +108,8 @@ impl OrbitSource  for OrbitSourceImpl {
             warn!("sp3 with zero epochs: {}", source_file.path);
             valid_to = valid_from;
         }
+
+        info!("{}: {} - {} ({})", source_file.source, valid_from, valid_to, period);
 
         let mut sv_orbits:HashMap<String, Orbits> = HashMap::new();
         for (epoch, sv, (x, y, z)) in sp3.satellites_position_km_iter() {
