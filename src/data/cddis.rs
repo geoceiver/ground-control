@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use bytes::buf::Reader;
 use bytes::{Buf, Bytes};
 use flate2::bufread::GzDecoder;
+use reqwest::header::ACCEPT_ENCODING;
 use std::io::BufReader;
 use hifitime::Epoch;
 use regex::Regex;
@@ -58,7 +59,7 @@ pub async fn s3_get_gz_object_buffer(path:&str) -> Result<BufReader<GzDecoder<Re
 
     let sp3_url = s3_get_object_url(path);
     let client = build_reqwest_client()?;
-    let sp3_request = client.get(sp3_url).send().await?;
+    let sp3_request = client.get(sp3_url).header(ACCEPT_ENCODING, "gzip").send().await?;
     let sp3_reader = sp3_request.bytes().await?.reader();
     let fd = GzDecoder::new(sp3_reader);
 
