@@ -67,6 +67,11 @@ impl OrbitSource  for OrbitSourceImpl {
 
         let mut source_file = source_file.into_inner();
 
+        if !source_file.path.starts_with("2357") {
+            info!("skipping sp3 pre-week 2357");
+            return Ok(());
+        }
+
         info!("processing: {:?}", source_file);
 
         let mut sp3_buf_reader = s3_get_gz_object_buffer(source_file.path.as_str()).await?;
