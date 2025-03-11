@@ -245,15 +245,14 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
         let client = build_reqwest_client()?;
 
-        let stream = client.get(get_cddis_file_path(&file_request.file_path))
-             .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?.bytes_stream();
-
-        let body_stream = Body::wrap_stream(stream);
+        let bytes = client.get(get_cddis_file_path(&file_request.file_path))
+             .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?.bytes().await?;
+        //let body_stream = Body::wrap_stream(stream);
 
         let upload_url = s3_put_object_url(file_request.file_path.as_str());
 
         let client = build_reqwest_client()?;
-        client.put(upload_url).body(body_stream).send().await?;
+        client.put(upload_url).body(bytes).send().await?;
 
         info!("uploaded file: {}", file_request.file_path);
 
