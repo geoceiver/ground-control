@@ -159,17 +159,18 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
         for (file_path, hash) in current_listing.files.iter() {
 
-            let head_url = s3_object_head(file_path);
-            let client = build_reqwest_client().unwrap();
-            let result = client.head(head_url).send().await.unwrap();
-            let file_archived;
-            if result.status().is_success() {
-                file_archived = true;
-            }
-            else {
-                file_archived = false;
-                warn!("file not archived: {}", file_path);
-            }
+            // let head_url = s3_object_head(file_path);
+            // let client = build_reqwest_client().unwrap();
+            // let result = client.head(head_url).send().await.unwrap();
+            // let file_archived;
+            // if result.status().is_success() {
+            //     file_archived = true;
+            //     info!("file archived: {}", file_path);
+            // }
+            // else {
+            //     file_archived = false;
+            //     warn!("file not archived: {}", file_path);
+            // }
 
 
             if !archived_listing.files.contains_key(file_path) ||
