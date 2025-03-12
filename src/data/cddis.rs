@@ -138,15 +138,15 @@ pub struct ArchiveRequest {
 }
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
-pub struct ArchiveWeekRequest {
-    week:u64,
+pub struct ArchiveWeeksRequest {
+    weeks:Vec<u64>,
     archive:Option<bool>
 }
 
 
 #[restate_sdk::object]
 pub trait CDDISArchiveWeek {
-    async fn download_week(week_request:Json<ArchiveWeekRequest>) -> Result<(), HandlerError>;
+    async fn download_weeks(weeks_request:Json<ArchiveWeeksRequest>) -> Result<(), HandlerError>;
     async fn download_file(file_request:Json<FileRequest>) -> Result<(), HandlerError>;
 }
 
@@ -154,28 +154,31 @@ pub struct CDDISArchiveWeekImpl;
 
 impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
-    async fn download_week(&self, ctx: ObjectContext<'_>, week_request:Json<ArchiveWeekRequest>) -> Result<(), HandlerError> {
+    async fn download_weeks(&self, ctx: ObjectContext<'_>, weeks_request:Json<ArchiveWeeksRequest>) -> Result<(), HandlerError> {
 
-        let week_request = week_request.into_inner();
+        let weeks_request = weeks_request.into_inner();
 
-        info!("start week {}", week_request.week );
+        for week in weeks_request.weeks
+        {
+            info!("start week {}", week );
 
-        let archived_listing = get_archived_directory_listing(week_request.week).await?;
-        let current_listing = get_current_directory_listing(week_request.week).await?;
+            let archived_listing = get_archived_directory_listing(week).await?;
+            let current_listing = get_current_directory_listing(week).await?;
 
-        for (file_path, hash) in current_listing.files.iter() {
+            for (file_path, hash) in current_listing.files.iter() {
 
-            if !archived_listing.files.contains_key(file_path) ||
-                hash != archived_listing.files.get(file_path).unwrap()
-            {
+                if !archived_listing.files.contains_key(file_path) ||
+                    hash != archived_listing.files.get(file_path).unwrap()
+                {
 
-                let file_request = FileRequest {file_path:file_path.clone(),
-                    hash:hash.clone(),
-                    week:week_request.week,
-                    process:week_request.archive.unwrap_or(false)};
+                    let file_request = FileRequest {file_path:file_path.clone(),
+                        hash:hash.clone(),
+                        week:week,
+                        process:weeks_request.archive.unwrap_or(false)};
 
-                ctx.object_client::<CDDISArchiveWeekClient>(week_request.week.to_string()).download_file(Json(file_request)).call().await?;
+                    ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_file(Json(file_request)).call().await?;
 
+                }
             }
         }
 
@@ -268,17 +271,38 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
         }
 
         let weeks:Vec<u64> = (first_week..=current_week).rev().collect();
-        let mut parallel_tasks = Vec::new();
-        for week in weeks {
-            let week_request = ArchiveWeekRequest {week, archive:archive_request.archive};
-            let promise = ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_week(Json(week_request)).call();
-            parallel_tasks.push(promise);
+
+        let parallelism:usize;
+        if archive_request.parallelism.is_some_and(|p| p > 0) {
+            parallelism = archive_request.parallelism.unwrap() as usize;
+        }
+        else {
+            parallelism = 1;
+        }
+
+        let week_chunks:Vec<Vec<u64>> = weeks.chunks(weeks.len() / parallelism).map(|chunk| chunk.to_vec()).collect();
+
+        let mut job_status_list = Vec::new();
+
+        for parallel_job in 0..parallelism {
+            let weeks = week_chunks.get(parallel_job).unwrap().clone();
+
+            info!("starting job {} with weeks: {}", parallel_job,
+                weeks.iter()
+                .map(|x|x.to_string()).collect::<Vec<String>>().join(","));
+
+            let download_uuid = ctx.rand_uuid();
+            let week_request = ArchiveWeeksRequest {weeks, archive:archive_request.archive};
+            let promise = ctx.object_client::<CDDISArchiveWeekClient>(download_uuid).download_weeks(Json(week_request)).call();
+
+            job_status_list.push(promise);
         }
 
         // need to sequentially await tasks, as fan-out/in isn't supported in Rust SDK yet
-        for promise in parallel_tasks {
-            promise.await?
+        for promise in job_status_list {
+            let _ = promise.await; // allow failures but need to log/re-try out of workflow?
         }
+
 
         let last_update_completed = ctx.run(||current_gpst_seconds()).await.unwrap();
         let update_duration = last_update_completed - last_update_started;
