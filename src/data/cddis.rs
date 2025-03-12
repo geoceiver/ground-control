@@ -170,11 +170,19 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
                 if !archived_listing.files.contains_key(file_path) ||
                     hash != archived_listing.files.get(file_path).unwrap()
                 {
+                    let process;
+                    if weeks_request.archive.unwrap_or(false) {
+                        process = false;
+                    }
+                    else {
+                        process = true;
+                    }
 
                     let file_request = FileRequest {file_path:file_path.clone(),
                         hash:hash.clone(),
-                        week:week,
-                        process:weeks_request.archive.unwrap_or(false)};
+                        week,
+                        process
+                    };
 
                     ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_file(Json(file_request)).call().await?;
 
