@@ -138,10 +138,10 @@ impl  Orbits
         None
     }
 
-    pub fn get_orbit_at(&self, epoch:f64) -> Result<Orbit, anyhow::Error> {
+    pub fn get_orbit_at(&self, epoch:f64) -> Result<Orbit, HandlerError> {
 
         if epoch < self.valid_from || epoch > self.valid_to {
-            return Err(anyhow!("Epoch outside orbit data range."));
+            return Err(TerminalError::new(format!("Epoch outside orbit data range.")).into());
         }
 
         let epoch_index = (epoch - self.valid_from) / self.period;
@@ -156,7 +156,7 @@ impl  Orbits
 
     }
 
-    pub fn lagrange_orbit_interpolation(&self, epoch:f64, order:i64) -> Result<Orbit, anyhow::Error> {
+    pub fn lagrange_orbit_interpolation(&self, epoch:f64, order:i64) -> Result<Orbit, HandlerError> {
 
         info!("caclulating orbit for {} at {} using {}", self.sv, epoch, self.source);
 
@@ -170,7 +170,7 @@ impl  Orbits
         let epoch_index = epoch_index_fractional.round() as usize;
 
         if epoch_index < min_before || epoch_index + min_after > self.epochs.len() - 1 {
-            return Err(anyhow!("Interpolation window outside epoch data range."))
+            return Err(TerminalError::new(format!("Interpolation window outside epoch data range.")).into())
         }
 
         if epoch.fract() == 0.0 {
@@ -316,10 +316,13 @@ impl SV for SVImpl {
     // }
 
     async fn get_orbit(&self, ctx: SharedObjectContext<'_>, epoch:f64) -> Result<Json<Option<Orbit>>, HandlerError> {
-        let orbits = ctx.get::<Json<Orbits>>("ORBITS_COD_ULT").await?.unwrap().into_inner();
-        //let orbits = ArchivedOrbits::from_bytes(&bytes)?;
-        let orbit = orbits.get_orbit_at(epoch)?;
-        return Ok(Json(Some(orbit)));
+        let orbits = ctx.get::<Json<Orbits>>("ORBITS_COD_ULT").await?;
+        if let Some(orbits) = orbits {
+            let orbit = orbits.into_inner().get_orbit_at(epoch)?;
+            return Ok(Json(Some(orbit)));
+        }
+
+        Err(TerminalError::new(format!("Orbit for {} not found in ORBITS_COD_ULT at {}", ctx.key(), epoch)).into())
     }
 
     // async fn clock(&self, _ctx: SharedObjectContext<'_>, request:Json<ClockRequest>) -> Result<Json<Clock>, HandlerError> {

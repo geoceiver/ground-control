@@ -8,11 +8,10 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::serde_as;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
-use crate::data::s3_object_head;
+use crate::data::sources::{OrbitSourceClient, RinexSource};
 
-use super::sources::{OrbitSourceClient, RinexSource};
 use super::{build_reqwest_client, gpst_week, s3_get_object_url, s3_put_object_url};
 
 const MIN_GPST_WEEKS: u64 = 2238; // CDDIS format changed for products prior to week 2238
@@ -127,20 +126,27 @@ pub struct WeekList {
 pub struct FileRequest {
     week:u64,
     file_path:String,
-    hash:String
+    hash:String,
+    process:bool
 }
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
-pub struct DownloadRequest {
+pub struct ArchiveRequest {
     weeks:Option<WeekList>,
     archive:Option<bool>,
     parallelism:Option<u32>
 }
 
+#[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
+pub struct ArchiveWeekRequest {
+    week:u64,
+    archive:Option<bool>
+}
+
 
 #[restate_sdk::object]
 pub trait CDDISArchiveWeek {
-    async fn download_week() -> Result<(), HandlerError>;
+    async fn download_week(week_request:Json<ArchiveWeekRequest>) -> Result<(), HandlerError>;
     async fn download_file(file_request:Json<FileRequest>) -> Result<(), HandlerError>;
 }
 
@@ -148,37 +154,27 @@ pub struct CDDISArchiveWeekImpl;
 
 impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
-    async fn download_week(&self, ctx: ObjectContext<'_>) -> Result<(), HandlerError> {
+    async fn download_week(&self, ctx: ObjectContext<'_>, week_request:Json<ArchiveWeekRequest>) -> Result<(), HandlerError> {
 
-        let week:u64 = ctx.key().parse::<u64>()?;
+        let week_request = week_request.into_inner();
 
-        info!("start week {}", week );
+        info!("start week {}", week_request.week );
 
-        let archived_listing = get_archived_directory_listing(week).await?;
-        let current_listing = get_current_directory_listing(week).await?;
+        let archived_listing = get_archived_directory_listing(week_request.week).await?;
+        let current_listing = get_current_directory_listing(week_request.week).await?;
 
         for (file_path, hash) in current_listing.files.iter() {
 
-            // let head_url = s3_object_head(file_path);
-            // let client = build_reqwest_client().unwrap();
-            // let result = client.head(head_url).send().await.unwrap();
-            // let file_archived;
-            // if result.status().is_success() {
-            //     file_archived = true;
-            //     info!("file archived: {}", file_path);
-            // }
-            // else {
-            //     file_archived = false;
-            //     warn!("file not archived: {}", file_path);
-            // }
-
-
             if !archived_listing.files.contains_key(file_path) ||
                 hash != archived_listing.files.get(file_path).unwrap()
-             {
+            {
 
-                let file_request = FileRequest {file_path:file_path.clone(), hash:hash.clone(), week};
-                ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_file(Json(file_request)).send();
+                let file_request = FileRequest {file_path:file_path.clone(),
+                    hash:hash.clone(),
+                    week:week_request.week,
+                    process:week_request.archive.unwrap_or(false)};
+
+                ctx.object_client::<CDDISArchiveWeekClient>(week_request.week.to_string()).download_file(Json(file_request)).call().await?;
 
             }
         }
@@ -213,25 +209,29 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
             archived_listing.files.insert(file_request.file_path.to_string(), file_request.hash);
             put_archived_directory_listing(file_request.week, &archived_listing).await?;
 
-            // let path_parts = cddis_path_parser(file_request.file_path.as_str());
+            if file_request.process {
 
-            // if path_parts.is_some() {
-            //     let path_parts  = path_parts.unwrap();
-            //     let rinex_file = RinexSource {
-            //         path:file_request.file_path.clone(),
-            //         ac:path_parts["AC"].to_string(),
-            //         solution:path_parts["TYP"].to_string(),
-            //         solution_time:path_parts["TIME"].to_string(),
-            //         content_type:path_parts["CNT"].to_string(),
-            //         source:"CDDIS".to_string(),
-            //         collected_at: Epoch::now()?.to_gpst_seconds(),
-            //         sv_coverage: None
-            //     };
-            //     if path_parts["TYP"].eq("ULT") && path_parts["CNT"].eq("ORB") && path_parts["FMT"].eq("SP3") {
-            //         ctx.object_client::<OrbitSourceClient>(rinex_file.get_source_key())
-            //             .process_sp3(Json(rinex_file)).send();
-            //     }
-            // }
+                let path_parts = cddis_path_parser(file_request.file_path.as_str());
+
+                if path_parts.is_some() {
+                    let path_parts  = path_parts.unwrap();
+                    let rinex_file = RinexSource {
+                        path:file_request.file_path.clone(),
+                        ac:path_parts["AC"].to_string(),
+                        solution:path_parts["TYP"].to_string(),
+                        solution_time:path_parts["TIME"].to_string(),
+                        content_type:path_parts["CNT"].to_string(),
+                        source:"CDDIS".to_string(),
+                        collected_at: Epoch::now()?.to_gpst_seconds(),
+                        sv_coverage: None
+                    };
+                    if path_parts["TYP"].eq("ULT") && path_parts["CNT"].eq("ORB") && path_parts["FMT"].eq("SP3") {
+                        ctx.object_client::<OrbitSourceClient>(rinex_file.get_source_key())
+                            .process_sp3(Json(rinex_file)).send();
+                    }
+                }
+
+            }
 
             return Ok(());
         }
@@ -245,21 +245,22 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
 #[restate_sdk::workflow]
 pub trait CDDISArchiveWorkflow {
-    async fn run(directory: Json<DownloadRequest>) -> Result<(), HandlerError>;
+    async fn run(directory: Json<ArchiveRequest>) -> Result<(), HandlerError>;
 }
 
 pub struct CDDISArchiveWorkflowImpl;
 
 impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
 
-    async fn run(&self, mut ctx: WorkflowContext<'_>, download_request:Json<DownloadRequest>) -> Result<(), HandlerError> {
+    async fn run(&self, mut ctx: WorkflowContext<'_>, archive_request:Json<ArchiveRequest>) -> Result<(), HandlerError> {
+
+        let archive_request = archive_request.into_inner();
 
         let last_update_started = ctx.run(||current_gpst_seconds()).await.unwrap();
         let current_week = ctx.run(||current_gpst_week()).await.unwrap();
-        let download_request = download_request.into_inner();
 
         let first_week;
-        if download_request.archive.is_some_and(|a|a==true) {
+        if archive_request.archive.is_some_and(|a|a==true) {
             first_week = MIN_GPST_WEEKS;
         }
         else {
@@ -267,9 +268,16 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
         }
 
         let weeks:Vec<u64> = (first_week..=current_week).rev().collect();
-
+        let mut parallel_tasks = Vec::new();
         for week in weeks {
-            ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_week().send();
+            let week_request = ArchiveWeekRequest {week, archive:archive_request.archive};
+            let promise = ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_week(Json(week_request)).call();
+            parallel_tasks.push(promise);
+        }
+
+        // need to sequentially await tasks, as fan-out/in isn't supported in Rust SDK yet
+        for promise in parallel_tasks {
+            promise.await?
         }
 
         let last_update_completed = ctx.run(||current_gpst_seconds()).await.unwrap();
@@ -280,13 +288,20 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
         if seconds_until_next_update < 0.0 {
             seconds_until_next_update = 0.0;
         }
-        info!("next update in {} seconds", seconds_until_next_update);
 
-        let next_job_id = ctx.rand_uuid();
-        ctx.workflow_client::
-            <CDDISArchiveWorkflowClient>(next_job_id)
-            .run(Json(download_request))
-            .send_with_delay(Duration::from_secs(seconds_until_next_update as u64));
+        if archive_request.archive.unwrap_or(false) {
+            info!("next update in {} seconds", seconds_until_next_update);
+
+            let next_job_id = ctx.rand_uuid();
+            ctx.workflow_client::
+                <CDDISArchiveWorkflowClient>(next_job_id)
+                .run(Json(archive_request))
+                .send_with_delay(Duration::from_secs(seconds_until_next_update as u64));
+
+
+        } else {
+            info!("compreshensive archive request complete...")
+        }
 
         Ok(())
     }

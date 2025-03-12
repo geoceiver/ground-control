@@ -17,89 +17,6 @@ fn test_km_mm( a:(f64, f64, f64), b:(f64, f64, f64) ) -> bool {
 }
 
 #[tokio::test]
-async fn r2_transfer_test() {
-    tracing_subscriber::fmt::fmt()
-        .with_max_level(tracing::Level::INFO) // Set the maximum log level
-        .init();
-
-    let loaded_env = dotenvy::dotenv();
-    if loaded_env.is_err() || std::env::var("EARTHDATA_TOKEN").is_err() {
-        tracing::info!("Failed to load keys from .env file: {}", loaded_env.err().unwrap());
-        std::process::exit(1);
-    }
-
-    let file_path = "2357/COD0OPSULT_20250680000_02D_05M_ORB.SP3.gz";
-
-    info!("starting download: {}", file_path);
-
-    let client = build_reqwest_client().unwrap();
-    let result = client.get(get_cddis_file_path(file_path))
-         .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await; //unwrap().bytes().await.unwrap();
-
-    if result.is_err() {
-        error!("{}", result.err().unwrap());
-        panic!();
-    }
-
-    let result = result.unwrap().bytes().await;
-
-    if result.is_err() {
-        error!("{}", result.err().unwrap());
-        panic!();
-    }
-
-    let bytes = result.unwrap();
-
-    info!("bytes downloaded: {}",  bytes.len());
-
-    let upload_url = s3_put_object_url(file_path);
-    let client = build_reqwest_client().unwrap();
-    let result = client.put(upload_url).body(bytes).send().await.unwrap();
-
-    if ! result.status().is_success() {
-        error!("failed to upload file: {:?}", result.error_for_status_ref())
-    }
-
-    info!("uploaded file: {}", file_path);
-
-
-    let head_url = s3_object_head(file_path);
-    let client = build_reqwest_client().unwrap();
-    let result = client.head(head_url).send().await.unwrap();
-
-    if ! result.status().is_success() {
-        error!("failed to get object head: {:?}", result.error_for_status_ref())
-    }
-
-    info!("object head: {:?}", result.headers())
-
-    // let mut archived_listing = get_archived_directory_listing(file_request.week).await?;
-    // archived_listing.files.insert(file_request.file_path.to_string(), file_request.hash);
-    // put_archived_directory_listing(file_request.week, &archived_listing).await?;
-
-    // let path_parts = cddis_path_parser(file_request.file_path.as_str());
-    // if path_parts.is_some() {
-    //     let path_parts  = path_parts.unwrap();
-    //     let rinex_file = RinexSource {
-    //         path:file_request.file_path.clone(),
-    //         ac:path_parts["AC"].to_string(),
-    //         solution:path_parts["TYP"].to_string(),
-    //         solution_time:path_parts["TIME"].to_string(),
-    //         content_type:path_parts["CNT"].to_string(),
-    //         source:"CDDIS".to_string(),
-    //         collected_at: Epoch::now()?.to_gpst_seconds(),
-    //         sv_coverage: None
-    //     };
-    //     if path_parts["TYP"].eq("ULT") && path_parts["CNT"].eq("ORB") && path_parts["FMT"].eq("SP3") {
-    //         ctx.object_client::<OrbitSourceClient>(rinex_file.get_source_key())
-    //             .process_sp3(Json(rinex_file)).send();
-    //     }
-    // }
-
-}
-
-
-#[tokio::test]
 async fn test_container() {
     tracing_subscriber::fmt::fmt()
         .with_max_level(tracing::Level::INFO) // Set the maximum log level
@@ -135,15 +52,6 @@ async fn test_container() {
 
     let ingress_url = test_container.ingress_url();
 
-    // pub struct OrbitSourceSP3File {
-    //     pub path:String,
-    //     pub ac:String,
-    //     pub solution: String,
-    //     pub solution_time: String,
-    //     pub source: String,
-    //     pub collected_at:f64,
-    // }
-
     let path = "2356/COD0OPSULT_20250640000_02D_05M_ORB.SP3.gz";
 
     let source = RinexSource {
@@ -159,7 +67,7 @@ async fn test_container() {
 
     // call container ingress url for /MyService/my_handler
     let response = reqwest::Client::new()
-        .post(format!("{}/OrbitSource/COD_ULT/processSp3", ingress_url))
+        .post(format!("{}/OrbitSource/CDDIS_COD_ULT_ORB/processSp3", ingress_url))
         .header("Accept", "application/json")
         .header("Content-Type", "*/*")
         .json(&source)
@@ -173,6 +81,7 @@ async fn test_container() {
     let epoch = 1425214207.5;
 
     info!("get orbit for E34 at: {}", epoch);
+
     let response = reqwest::Client::new()
         .get(format!("{}/SV/E34/getOrbit", ingress_url))
         .header("Accept", "application/json")
