@@ -213,23 +213,26 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
             archived_listing.files.insert(file_request.file_path.to_string(), file_request.hash);
             put_archived_directory_listing(file_request.week, &archived_listing).await?;
 
-            let path_parts = cddis_path_parser(file_request.file_path.as_str());
 
-            if path_parts.is_some() {
-                let path_parts  = path_parts.unwrap();
-                let rinex_file = RinexSource {
-                    path:file_request.file_path.clone(),
-                    ac:path_parts["AC"].to_string(),
-                    solution:path_parts["TYP"].to_string(),
-                    solution_time:path_parts["TIME"].to_string(),
-                    content_type:path_parts["CNT"].to_string(),
-                    source:"CDDIS".to_string(),
-                    collected_at: Epoch::now()?.to_gpst_seconds(),
-                    sv_coverage: None
-                };
-                if path_parts["TYP"].eq("ULT") && path_parts["CNT"].eq("ORB") && path_parts["FMT"].eq("SP3") {
-                    ctx.object_client::<OrbitSourceClient>(rinex_file.get_source_key())
-                        .process_sp3(Json(rinex_file)).send();
+            if file_request.week == 2357 {
+                let path_parts = cddis_path_parser(file_request.file_path.as_str());
+
+                if path_parts.is_some() {
+                    let path_parts  = path_parts.unwrap();
+                    let rinex_file = RinexSource {
+                        path:file_request.file_path.clone(),
+                        ac:path_parts["AC"].to_string(),
+                        solution:path_parts["TYP"].to_string(),
+                        solution_time:path_parts["TIME"].to_string(),
+                        content_type:path_parts["CNT"].to_string(),
+                        source:"CDDIS".to_string(),
+                        collected_at: Epoch::now()?.to_gpst_seconds(),
+                        sv_coverage: None
+                    };
+                    if path_parts["TYP"].eq("ULT") && path_parts["CNT"].eq("ORB") && path_parts["FMT"].eq("SP3") {
+                        ctx.object_client::<OrbitSourceClient>(rinex_file.get_source_key())
+                            .process_sp3(Json(rinex_file)).send();
+                    }
                 }
             }
 
