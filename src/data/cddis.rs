@@ -174,8 +174,7 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
 
             if !archived_listing.files.contains_key(file_path) ||
-                hash != archived_listing.files.get(file_path).unwrap() ||
-                !file_archived
+                hash != archived_listing.files.get(file_path).unwrap()
              {
 
                 let file_request = FileRequest {file_path:file_path.clone(), hash:hash.clone(), week};
