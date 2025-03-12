@@ -1,24 +1,19 @@
+use restate_sdk::prelude::*;
 use std::collections::BTreeMap;
-use std::env;
 use std::{fmt::Debug, time::Duration};
 use anyhow::anyhow;
-use bytes::buf::Reader;
-use bytes::{Buf, Bytes};
-use flate2::bufread::GzDecoder;
-use reqwest::header::ACCEPT_ENCODING;
-use std::io::{BufReader, Read};
 use hifitime::Epoch;
 use regex::Regex;
-use reqwest::{Body, StatusCode, Url};
-use restate_sdk::prelude::*;
-use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::serde_as;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
-use crate::data::sources::{OrbitSourceClient, RinexSource};
+use crate::data::s3_object_head;
 
+use super::sources::{OrbitSourceClient, RinexSource};
+use super::{build_reqwest_client, gpst_week, s3_get_object_url, s3_put_object_url};
 
 const MIN_GPST_WEEKS: u64 = 2238; // CDDIS format changed for products prior to week 2238
 const WEEK_LOOKBACK_PERIOD: u64 = 12; // Look back 12 weeks for updated productss
@@ -30,70 +25,11 @@ pub fn cddis_path_parser(path:&str) -> Option<regex::Captures<'_>> {
     return re.captures(path);
 }
 
-fn s3_bucket() -> Bucket {
-    // setting up a bucket
-    let endpoint = "https://35bb40698ef5bd005fe8af515201e351.r2.cloudflarestorage.com".parse().expect("endpoint is a valid Url");
-    let path_style = UrlStyle::VirtualHost;
-    let name = "cddis-deep-archive";
-    let region = "enam";
-    Bucket::new(endpoint, path_style, name, region).expect("Url has a valid scheme and host")
-}
-
-fn s3_credentials() -> Credentials {
-    // setting up the credentials
-    let key = env::var("AWS_ACCESS_KEY_ID").expect("AWS_ACCESS_KEY_ID is set and a valid String");
-    let secret = env::var("AWS_SECRET_ACCESS_KEY").expect("AWS_ACCESS_KEY_ID is set and a valid String");
-    Credentials::new(key, secret)
-}
-
-pub fn s3_get_object_url(path:&str) -> Url {
-    let bucket = s3_bucket();
-    let credentials = s3_credentials();
-
-    let get_object = bucket.get_object(Some(&credentials), path);
-    let presigned_url_duration = Duration::from_secs(60);
-    get_object.sign(presigned_url_duration)
-}
-
-pub async fn s3_get_gz_object_buffer(path:&str) -> Result<BufReader<GzDecoder<Reader<Bytes>>>, anyhow::Error>  {
-
-    let sp3_url = s3_get_object_url(path);
-    let client = build_reqwest_client()?;
-    let sp3_request = client.get(sp3_url).header(ACCEPT_ENCODING, "gzip").send().await?;
-    if sp3_request.status().is_success() {
-        let sp3_reader = sp3_request.bytes().await?.reader();
-        let fd = GzDecoder::new(sp3_reader);
-        let buf = BufReader::new(fd);
-        return Ok(buf);
-    }
-
-    error!("File not found: {}", path);
-    Err(anyhow!("File not found: {}", path))
-}
-
-pub fn s3_put_object_url(path:&str) -> Url {
-    let bucket = s3_bucket();
-    let credentials = s3_credentials();
-
-    let get_object = bucket.put_object(Some(&credentials), path);
-    let presigned_url_duration = Duration::from_secs(60);
-    get_object.sign(presigned_url_duration)
-}
-
-pub fn build_reqwest_client() -> Result<reqwest::Client, reqwest::Error> {
-    reqwest::Client::builder().use_rustls_tls().pool_max_idle_per_host(0).build()
-}
-
-pub fn gpst_week(epoch:&Epoch) -> u64 {
-    let gpst_week = (epoch.to_gpst_days() / 7.0).floor() as u64;
-    gpst_week
-}
-
 fn get_cddis_week_path(week:u64) -> String {
     format!("{}/{}", CDDIS_PATH, week)
 }
 
-fn get_cddis_file_path(file_path:&str) -> String {
+pub fn get_cddis_file_path(file_path:&str) -> String {
     format!("{}/{}", CDDIS_PATH, file_path)
 }
 
@@ -114,12 +50,12 @@ async fn get_archived_directory_listing(week:u64) -> Result<DirectoryListing, an
     let listing_url = s3_get_object_url(listing_path.as_str());
 
     let client = build_reqwest_client()?;
-    let listing_response = client.get(listing_url).send().await?;
+    let response = client.get(listing_url).send().await?;
 
     let archived_listing:DirectoryListing;
-    let status_code = listing_response.status();
+    let status_code = response.status();
     if status_code.is_success() {
-        archived_listing = serde_json::from_str(listing_response.text().await?.as_str())?;
+        archived_listing = serde_json::from_str(response.text().await?.as_str())?;
         return Ok(archived_listing);
     }
     else if status_code == StatusCode::NOT_FOUND {
@@ -128,7 +64,7 @@ async fn get_archived_directory_listing(week:u64) -> Result<DirectoryListing, an
 
     return Err( anyhow!("Unable to load archived directory listing."));
 }
-async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryListing) -> Result<(), HandlerError> {
+async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryListing) -> Result<(), anyhow::Error> {
 
     let listing_path = format!("{}/sha512.json", week);
 
@@ -136,12 +72,16 @@ async fn put_archived_directory_listing(week:u64, archived_listing:&DirectoryLis
 
     let client = build_reqwest_client()?;
     let body = json!(archived_listing);
-    client.put(listing_url).body(body.to_string()).send().await?;
+    let response = client.put(listing_url).body(body.to_string()).send().await?;
 
-    Ok(())
+    if response.status().is_success() {
+         return Ok(());
+    }
+
+    Err( anyhow!("Unable to put archived directory listing."))
 }
 
-async fn get_current_directory_listing(week:u64) -> Result<DirectoryListing, HandlerError> {
+async fn get_current_directory_listing(week:u64) -> Result<DirectoryListing, anyhow::Error> {
 
     let client = build_reqwest_client()?;
     let response = client.get(format!("{}/SHA512SUMS", get_cddis_week_path(week)))
@@ -149,22 +89,26 @@ async fn get_current_directory_listing(week:u64) -> Result<DirectoryListing, Han
         .send()
         .await?;
 
-    let directory_listing_text = response.text().await?;
+    if response.status().is_success() {
+        let directory_listing_text = response.text().await?;
 
-    let mut directory_listing = DirectoryListing::default();
+        let mut directory_listing = DirectoryListing::default();
 
-    for line in directory_listing_text.lines() {
-        let line_parts:Vec<&str> = line.split_whitespace().collect();
+        for line in directory_listing_text.lines() {
+            let line_parts:Vec<&str> = line.split_whitespace().collect();
 
-        if line_parts.len() == 2 {
-            // store week/name.ext format
-            let file_path = format!("{}/{}", week, line_parts.get(1).unwrap().to_string());
-            let hash = line_parts.get(0).unwrap().to_string();
-            directory_listing.files.insert(file_path, hash);
+            if line_parts.len() == 2 {
+                // store week/name.ext format
+                let file_path = format!("{}/{}", week, line_parts.get(1).unwrap().to_string());
+                let hash = line_parts.get(0).unwrap().to_string();
+                directory_listing.files.insert(file_path, hash);
+            }
         }
+
+        return Ok(directory_listing);
     }
 
-    Ok(directory_listing)
+    Err( anyhow!("Unable to get current directory listing."))
 }
 
 #[serde_as]
@@ -177,14 +121,6 @@ struct DirectoryListing {
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
 pub struct WeekList {
     weeks:Vec<u64>
-}
-
-impl WeekList {
-    pub fn new(weeks:Vec<u64>) -> Self {
-        Self {
-            weeks
-        }
-    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
@@ -221,12 +157,25 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
         let archived_listing = get_archived_directory_listing(week).await?;
         let current_listing = get_current_directory_listing(week).await?;
 
-
         for (file_path, hash) in current_listing.files.iter() {
+
+            let head_url = s3_object_head(file_path);
+            let client = build_reqwest_client().unwrap();
+            let result = client.head(head_url).send().await.unwrap();
+            let file_archived;
+            if result.status().is_success() {
+                file_archived = true;
+            }
+            else {
+                file_archived = false;
+                warn!("file not archived: {}", file_path);
+            }
+
 
             if !archived_listing.files.contains_key(file_path) ||
                 hash != archived_listing.files.get(file_path).unwrap() ||
-                file_path.contains("SP3") {
+                !file_archived
+             {
 
                 let file_request = FileRequest {file_path:file_path.clone(), hash:hash.clone(), week};
                 ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_file(Json(file_request)).send();
@@ -244,53 +193,52 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
         info!("starting download: {}", file_request.file_path);
 
         let client = build_reqwest_client()?;
+        let response = client.get(get_cddis_file_path(&file_request.file_path))
+             .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?;//.bytes().await?;
 
-        let bytes = client.get(get_cddis_file_path(&file_request.file_path))
-             .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap()).send().await?.bytes().await?;
-        //let body_stream = Body::wrap_stream(stream);
+        if response.status().is_success() {
 
-        let upload_url = s3_put_object_url(file_request.file_path.as_str());
+            let bytes = response.bytes().await?;
 
-        let client = build_reqwest_client()?;
-        let result = client.put(upload_url).body(bytes).send().await?;
-
-        if ! result.status().is_success() {
-            error!("failed to upload file: {:?}", result.error_for_status_ref())
-        }
-
-        let response = result.text().await?;
-        error!("response texts: {}", response);
-
-        info!("uploaded file: {}", file_request.file_path);
-
-        let mut archived_listing = get_archived_directory_listing(file_request.week).await?;
-        archived_listing.files.insert(file_request.file_path.to_string(), file_request.hash);
-        put_archived_directory_listing(file_request.week, &archived_listing).await?;
-
-        let path_parts = cddis_path_parser(file_request.file_path.as_str());
-
-        if path_parts.is_some() {
-            let path_parts  = path_parts.unwrap();
-            let rinex_file = RinexSource {
-                path:file_request.file_path.clone(),
-                ac:path_parts["AC"].to_string(),
-                solution:path_parts["TYP"].to_string(),
-                solution_time:path_parts["TIME"].to_string(),
-                content_type:path_parts["CNT"].to_string(),
-                source:"CDDIS".to_string(),
-                collected_at: Epoch::now()?.to_gpst_seconds(),
-                sv_coverage: None
-            };
-            if path_parts["TYP"].eq("ULT") && path_parts["CNT"].eq("ORB") && path_parts["FMT"].eq("SP3") {
-                ctx.object_client::<OrbitSourceClient>(rinex_file.get_source_key())
-                    .process_sp3(Json(rinex_file)).send();
+            let upload_url = s3_put_object_url(file_request.file_path.as_str());
+            let client = build_reqwest_client()?;
+            let response = client.put(upload_url).body(bytes).send().await?;
+            if ! response.status().is_success() {
+                error!("failed to upload file: {:?}", response.error_for_status_ref())
             }
+
+            info!("uploaded file: {}", file_request.file_path);
+
+            let mut archived_listing = get_archived_directory_listing(file_request.week).await?;
+            archived_listing.files.insert(file_request.file_path.to_string(), file_request.hash);
+            put_archived_directory_listing(file_request.week, &archived_listing).await?;
+
+            let path_parts = cddis_path_parser(file_request.file_path.as_str());
+
+            if path_parts.is_some() {
+                let path_parts  = path_parts.unwrap();
+                let rinex_file = RinexSource {
+                    path:file_request.file_path.clone(),
+                    ac:path_parts["AC"].to_string(),
+                    solution:path_parts["TYP"].to_string(),
+                    solution_time:path_parts["TIME"].to_string(),
+                    content_type:path_parts["CNT"].to_string(),
+                    source:"CDDIS".to_string(),
+                    collected_at: Epoch::now()?.to_gpst_seconds(),
+                    sv_coverage: None
+                };
+                if path_parts["TYP"].eq("ULT") && path_parts["CNT"].eq("ORB") && path_parts["FMT"].eq("SP3") {
+                    ctx.object_client::<OrbitSourceClient>(rinex_file.get_source_key())
+                        .process_sp3(Json(rinex_file)).send();
+                }
+            }
+
+            return Ok(());
         }
 
-        Ok(())
+        Err(HandlerError::from(anyhow!("Unable to download file from CDDIS archive: {}", file_request.file_path)))
     }
 }
-
 
 #[restate_sdk::workflow]
 pub trait CDDISArchiveWorkflow {
@@ -339,16 +287,5 @@ impl CDDISArchiveWorkflow for CDDISArchiveWorkflowImpl {
 
         Ok(())
     }
-
-    // async fn download_weeks(&self, ctx: WorkflowContext<'_>, weeks: Json<WeekList>) -> Result<(), HandlerError> {
-
-    //     let weeks = weeks.into_inner();
-
-    //     for week in weeks.weeks {
-    //         ctx.object_client::<CDDISArchiveWeekClient>(week.to_string()).download_week().call().await?;
-    //     }
-
-    //     Ok(())
-    // }
 
 }

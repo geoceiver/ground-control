@@ -4,7 +4,7 @@ use restate_sdk::{errors::{HandlerError, TerminalError}, prelude::{ContextClient
 use serde_with::serde_as;
 use sp3::{prelude::SV, SP3};
 use tracing::{error, info, warn};
-use crate::{data::cddis::s3_get_gz_object_buffer, objects::sv::{Orbit, Orbits, SVClient}};
+use crate::{data::s3_get_gz_object_buffer, objects::sv::{Orbit, Orbits, SVClient}};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone)]
 pub struct RinexSource {
