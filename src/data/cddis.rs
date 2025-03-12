@@ -235,6 +235,9 @@ impl CDDISArchiveWeek for CDDISArchiveWeekImpl {
 
             return Ok(());
         }
+        else if response.status() == StatusCode::NOT_FOUND {
+            return Err(TerminalError::new(format!("File not found {}", file_request.file_path)).into());
+        }
 
         Err(HandlerError::from(anyhow!("Unable to download file from CDDIS archive: {}", file_request.file_path)))
     }
