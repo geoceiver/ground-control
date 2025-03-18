@@ -267,43 +267,47 @@ impl ArchiveWeekWorkflow for ArchiveWeekWorkflowImpl {
 
         ctx.set("status", Json(status.clone()));
 
-        let queue_chunks:Vec<Vec<DirectoryListingItem>> = pending_files
-            .chunks(pending_files.len() / (archive_week_request.parallelism as usize))
-            .map(|chunk|chunk.to_vec())
-            .collect();
+        if pending_files.len() > 0 {
 
-        let mut queue_num = 1;
-        let mut queue_promises:Vec<_> = Vec::new();
+            let queue_chunks:Vec<Vec<DirectoryListingItem>> = pending_files
+                .chunks(pending_files.len() / (archive_week_request.parallelism as usize))
+                .map(|chunk|chunk.to_vec())
+                .collect();
 
-        for queue_chunk in queue_chunks {
+            let mut queue_num = 1;
+            let mut queue_promises:Vec<_> = Vec::new();
 
-            let (awakeable_id, promise) = ctx.awakeable::<String>();
-            queue_promises.push(promise);
+            for queue_chunk in queue_chunks {
 
-            let request_queue = FileQueueData {
-                request_id:request_id.clone(),
-                week,
-                queue_num,
-                enqueued_files:queue_chunk.len() as u32,
-                awakeable_id
-            };
+                let (awakeable_id, promise) = ctx.awakeable::<String>();
+                queue_promises.push(promise);
 
-            status.queues.push(request_queue.clone());
-            ctx.set("status", Json(status.clone()));
+                let request_queue = FileQueueData {
+                    request_id:request_id.clone(),
+                    week,
+                    queue_num,
+                    enqueued_files:queue_chunk.len() as u32,
+                    awakeable_id
+                };
 
-            info!("queue {}: {}", request_queue.get_key(), queue_chunk.len());
+                status.queues.push(request_queue.clone());
+                ctx.set("status", Json(status.clone()));
 
-            for file in queue_chunk {
-                let file_request = file.get_file_request(&request_queue, process_files);
-                ctx.object_client::<ArchiverFileQueueClient>(request_queue.get_key()).archive_file(Json(file_request)).send();
+                info!("queue {}: {}", request_queue.get_key(), queue_chunk.len());
+
+                for file in queue_chunk {
+                    let file_request = file.get_file_request(&request_queue, process_files);
+                    ctx.object_client::<ArchiverFileQueueClient>(request_queue.get_key()).archive_file(Json(file_request)).send();
+                }
+
+                queue_num += 1;
             }
 
-            queue_num += 1;
-        }
+            // need to sequentially await queues because Rust SDK doesn't implement join_all
+            for queue_promise in queue_promises {
+                queue_promise.await?;
+            }
 
-        // need to sequentially await queues because Rust SDK doesn't implement join_all
-        for queue_promise in queue_promises {
-            queue_promise.await?;
         }
 
         Ok(())
