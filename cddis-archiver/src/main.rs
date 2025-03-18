@@ -1,6 +1,9 @@
+use std::f64::INFINITY;
+
 use archiver::{ArchiveRequest, ArchiveWeekWorkflow, ArchiveWeekWorkflowImpl, ArchiveWeeks, ArchiverWorkflow, ArchiverWorkflowClient, ArchiverWorkflowImpl};
 use queue::{ArchiverFileQueue, ArchiverFileQueueImpl};
 use restate_sdk::prelude::*;
+use tracing::info;
 
 mod archiver;
 mod queue;
@@ -32,6 +35,8 @@ impl ArchiverFullTestWorkflow for ArchiverFullTestWorkflowImpl {
             recurring: Some(false)
         };
 
+        info!("starting job: {:?}", archive_request);
+
         ctx.workflow_client::<ArchiverWorkflowClient>(request_id).run(Json(archive_request)).call().await?;
 
         Ok(())
@@ -51,7 +56,7 @@ async fn main() {
 
     let loaded_env = dotenvy::dotenv();
     if loaded_env.is_err() || std::env::var("EARTHDATA_TOKEN").is_err() {
-        tracing::info!("Failed to load keys from .env file: {}", loaded_env.err().unwrap());
+        info!("Failed to load keys from .env file: {}", loaded_env.err().unwrap());
         std::process::exit(1);
     }
 

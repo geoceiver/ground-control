@@ -216,7 +216,10 @@ impl ArchiveWeekWorkflow for ArchiveWeekWorkflowImpl {
 
     async fn run(&self, ctx:WorkflowContext<'_>, archive_week_request:Json<ArchiveWeekRequest>) -> Result<(), HandlerError> {
 
+
         let archive_week_request = archive_week_request.into_inner();
+        info!("starting week: {}", archive_week_request.week);
+
         let last_update_started = ctx.run(||current_gpst_seconds()).await?;
 
         let request_id = archive_week_request.request_id.clone();
@@ -358,7 +361,7 @@ impl ArchiverWorkflow for ArchiverWorkflowImpl {
 
         for week_request in archive_request.week_requests(current_week) {
 
-            //info!("week: {:?}", week_request);
+
 
             // tood handle failures in workflow status
             let result = ctx.workflow_client::<ArchiveWeekWorkflowClient>(week_request.get_key())
