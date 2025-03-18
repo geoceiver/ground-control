@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.97"
+dotenvy = "0.15.7"
 futures-util = "0.3.31"
 ground-control = { version = "0.1.0", path = "../ground-control" }
 hifitime = "4.0.2"
