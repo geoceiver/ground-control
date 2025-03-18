@@ -1,4 +1,10 @@
-use std::f64::INFINITY;
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 
 use archiver::{ArchiveRequest, ArchiveWeekWorkflow, ArchiveWeekWorkflowImpl, ArchiveWeeks, ArchiverWorkflow, ArchiverWorkflowClient, ArchiverWorkflowImpl};
 use queue::{ArchiverFileQueue, ArchiverFileQueueImpl};

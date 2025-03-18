@@ -21,6 +21,9 @@ tokio-util = "0.7.14"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator =  "0.6"
+
 [dev-dependencies]
 dotenvy = "0.15.7"
 restate-sdk-test-env = { path = "../../sdk-rust/test-env" }
