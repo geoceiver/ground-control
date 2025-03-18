@@ -62,4 +62,8 @@ async fn main() {
         .bind(ArchiverFullTestWorkflowImpl.serve())
         .build();
 
+    HttpServer::new(endpoint)
+        .listen_and_serve("0.0.0.0:9080".parse().unwrap())
+        .await;
+
 }
