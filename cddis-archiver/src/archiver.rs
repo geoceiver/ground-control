@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Debug};
+use std::{cmp, collections::BTreeMap, fmt::Debug};
 use ground_control::gpst::{current_gpst_seconds, current_gpst_week};
 use restate_sdk::{prelude::*,serde::Json,errors::{HandlerError, TerminalError}};
 use serde_with::serde_as;
@@ -270,7 +270,7 @@ impl ArchiveWeekWorkflow for ArchiveWeekWorkflowImpl {
         if pending_files.len() > 0 {
 
             let queue_chunks:Vec<Vec<DirectoryListingItem>> = pending_files
-                .chunks(pending_files.len() / (archive_week_request.parallelism as usize))
+                .chunks(cmp::max(pending_files.len() / (archive_week_request.parallelism as usize), pending_files.len()))
                 .map(|chunk|chunk.to_vec())
                 .collect();
 
