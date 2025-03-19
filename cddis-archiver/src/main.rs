@@ -35,7 +35,7 @@ impl ArchiverFullTestWorkflow for ArchiverFullTestWorkflowImpl {
 
         let archive_request = ArchiveRequest {
             request_id: request_id.clone(),
-            parallelism: Some(10),
+            parallelism: Some(25),
             weeks: Some(ArchiveWeeks::RecentWeeks(3)),
             process_files: Some(false),
             recurring: Some(false)

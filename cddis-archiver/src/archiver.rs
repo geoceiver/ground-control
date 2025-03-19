@@ -274,7 +274,8 @@ impl ArchiveWeekWorkflow for ArchiveWeekWorkflowImpl {
                 chunk_size = pending_files.len() / (archive_week_request.parallelism as usize);
             }
             else {
-                chunk_size = archive_week_request.parallelism as usize;
+                //
+                chunk_size = 1;
             }
 
             let queue_chunks:Vec<Vec<DirectoryListingItem>> = pending_files
