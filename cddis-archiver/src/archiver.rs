@@ -269,8 +269,16 @@ impl ArchiveWeekWorkflow for ArchiveWeekWorkflowImpl {
 
         if pending_files.len() > 0 {
 
+            let chunk_size;
+            if pending_files.len() > archive_week_request.parallelism as usize {
+                chunk_size = pending_files.len() / (archive_week_request.parallelism as usize);
+            }
+            else {
+                chunk_size = archive_week_request.parallelism as usize;
+            }
+
             let queue_chunks:Vec<Vec<DirectoryListingItem>> = pending_files
-                .chunks(cmp::max(pending_files.len() / (archive_week_request.parallelism as usize), pending_files.len()))
+                .chunks(chunk_size)
                 .map(|chunk|chunk.to_vec())
                 .collect();
 
