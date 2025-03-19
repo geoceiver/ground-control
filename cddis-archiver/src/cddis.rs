@@ -18,6 +18,11 @@ pub fn get_archive_file_path(week:u32, file_path:&str) -> String {
     format!("cddis/{}/{}", week, file_path)
 }
 
+pub fn cddis_filename_parser(path:&str) -> Option<Captures<'_>> {
+    let re = Regex::new(r"^(?<AC>.{3})0(?<PROJ>.{3})(?<TYP>.{3})_(?<TIME>[0-9]{11})_(?<PER>.*)_(?<SMP>.*)_(?<CNT>.*)\.(?<FMT>.*)\.gz$").unwrap();
+    return re.captures(path);
+}
+
 pub fn cddis_path_parser(path:&str) -> Option<Captures<'_>> {
     let re = Regex::new(r"^(?<WEEK>\d{4})\/(?<AC>.{3})0(?<PROJ>.{3})(?<TYP>.{3})_(?<TIME>[0-9]{11})_(?<PER>.*)_(?<SMP>.*)_(?<CNT>.*)\.(?<FMT>.*)\.gz$").unwrap();
     return re.captures(path);

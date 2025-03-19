@@ -6,16 +6,19 @@ use restate_sdk::prelude::*;
 use futures_util::{StreamExt, TryStreamExt};
 use rusty_s3::{actions::CreateMultipartUpload, S3Action};
 
-use tracing::info;
+use tracing::{info, warn};
 use crate::{r2::{r2_cddis_bucket, r2_credentials, r2_get_archived_directory_listing, r2_put_archived_directory_listing}, utils::build_reqwest_client};
 
-const CHUNK_SIZE:usize = 100_000;
+//const CHUNK_SIZE:usize = 100_000;
+const MAX_FILE_SIZE:u64 = 100_000_000;
 
 // Error objects
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
 pub enum FileError {
     FileNotFound,
+    FileTooLarge(u64),
+    InvalidType,
     HashMismatch(String), // received hash value
     UploadError
 }
@@ -121,37 +124,51 @@ impl ArchiverFileQueue for ArchiverFileQueueImpl {
             .send().await?;
 
         let content_length = response.content_length();
-        //info!("content_length: {}", response.content_length().unwrap());
+        if content_length.is_some() && content_length.unwrap() > MAX_FILE_SIZE {
 
-        let bucket = r2_cddis_bucket();
-        let credentials = r2_credentials();
+            warn!("file {} too large: {}", file_request.archive_path.to_string(), content_length.unwrap());
 
-        info!("file: {}", file_request.archive_path);
-
-        let put_object = bucket.put_object(Some(&credentials), &file_request.archive_path);
-        let put_url = put_object.sign(Duration::from_secs(30));
-
-        // pushing buffer directly...TODO add support for R2's busted multipart uplaods implementation...
-        let result = client.put(put_url).body(response.bytes().await?).send().await;
-
-        if !result.is_ok() ||
-            !result.unwrap().status().is_success() {
-
-            // TODO need to refine error logging
             let file_error = FileRequestError {
-                error:FileError::UploadError,
+                error:FileError::FileTooLarge(content_length.unwrap()),
                 file_request: file_request.clone(),
                 cddis_size: content_length.unwrap() as u64
             };
             status.file_errors.push(file_error);
+
         }
         else {
-            // send success message to update_manifest to serialize updates per week directory
-            // if we could this is a sideways attempt at fanning in messages from multiple queues
-            // despite lack of support from rust sdk
 
-            let week_key = format!("cddis_week_{}", status.queue.week);
-            ctx.object_client::<ArchiverFileQueueClient>(week_key).update_manifest(Json(file_request.clone())).send();
+            let bucket = r2_cddis_bucket();
+            let credentials = r2_credentials();
+
+            info!("file: {}", file_request.archive_path);
+
+            let put_object = bucket.put_object(Some(&credentials), &file_request.archive_path);
+            let put_url = put_object.sign(Duration::from_secs(30));
+
+            // pushing buffer directly...TODO add support for R2's busted multipart uplaods implementation...
+            let result = client.put(put_url).body(response.bytes().await?).send().await;
+
+            if !result.is_ok() ||
+                !result.unwrap().status().is_success() {
+
+                // TODO need to refine error logging
+                let file_error = FileRequestError {
+                    error:FileError::UploadError,
+                    file_request: file_request.clone(),
+                    cddis_size: content_length.unwrap() as u64
+                };
+                status.file_errors.push(file_error);
+            }
+            else {
+                // send success message to update_manifest to serialize updates per week directory
+                // if we could this is a sideways attempt at fanning in messages from multiple queues
+                // despite lack of support from rust sdk
+
+                let week_key = format!("cddis_week_{}", status.queue.week);
+                ctx.object_client::<ArchiverFileQueueClient>(week_key).update_manifest(Json(file_request.clone())).send();
+            }
+
         }
 
         status.completed_files += 1;
