@@ -6,8 +6,8 @@ use tikv_jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 
 
-use archiver::{ArchiveRequest, ArchiveWeekWorkflow, ArchiveWeekWorkflowImpl, ArchiveWeeks, ArchiverWorkflow, ArchiverWorkflowClient, ArchiverWorkflowImpl};
-use queue::{ArchiverFileQueue, ArchiverFileQueueImpl};
+use archiver::{CDDISArchiveRequest, CDDISArchiveWeekWorkflow, CDDISArchiveWeekWorkflowImpl, CDDISArchiveWeeks, CDDISArchiverWorkflow, CDDISArchiverWorkflowClient, CDDISArchiverWorkflowImpl};
+use queue::{CDDISArchiverFileQueue, CDDISArchiverFileQueueImpl};
 use restate_sdk::prelude::*;
 use tracing::info;
 
@@ -18,32 +18,32 @@ mod cddis;
 mod utils;
 
 #[restate_sdk::workflow]
-trait ArchiverFullTestWorkflow {
+trait CDDSArchiverFullTestWorkflow {
     async fn run() -> Result<(), HandlerError>;
 
     #[shared]
     async fn get_status() -> Result<bool, HandlerError>;
 }
 
-struct ArchiverFullTestWorkflowImpl;
+struct CDDISArchiverFullTestWorkflowImpl;
 
-impl ArchiverFullTestWorkflow for ArchiverFullTestWorkflowImpl {
+impl CDDSArchiverFullTestWorkflow for CDDISArchiverFullTestWorkflowImpl {
 
     async fn run(&self, mut ctx: WorkflowContext<'_>) ->  Result<(),HandlerError>  {
 
         let request_id = format!("test_{}", ctx.rand_uuid());
 
-        let archive_request = ArchiveRequest {
+        let archive_request = CDDISArchiveRequest {
             request_id: request_id.clone(),
             parallelism: Some(25),
-            weeks: Some(ArchiveWeeks::RecentWeeks(3)),
+            weeks: Some(CDDISArchiveWeeks::RecentWeeks(3)),
             process_files: Some(false),
             recurring: Some(false)
         };
 
         info!("starting job: {:?}", archive_request);
 
-        ctx.workflow_client::<ArchiverWorkflowClient>(request_id).run(Json(archive_request)).call().await?;
+        ctx.workflow_client::<CDDISArchiverWorkflowClient>(request_id).run(Json(archive_request)).call().await?;
 
         Ok(())
     }
@@ -67,10 +67,10 @@ async fn main() {
     }
 
     let endpoint = Endpoint::builder()
-        .bind(ArchiverFileQueueImpl.serve())
-        .bind(ArchiverWorkflowImpl.serve())
-        .bind(ArchiveWeekWorkflowImpl.serve())
-        .bind(ArchiverFullTestWorkflowImpl.serve())
+        .bind(CDDISArchiverFileQueueImpl.serve())
+        .bind(CDDISArchiverWorkflowImpl.serve())
+        .bind(CDDISArchiveWeekWorkflowImpl.serve())
+        .bind(CDDISArchiverFullTestWorkflowImpl.serve())
         .build();
 
     HttpServer::new(endpoint)

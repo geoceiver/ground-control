@@ -1,5 +1,4 @@
 use regex::{Captures, Regex};
-use anyhow::{anyhow, Error};
 use restate_sdk::{errors::{HandlerError, TerminalError}, serde::Json};
 
 use crate::{archiver::DirectoryListing, utils::build_reqwest_client};
@@ -39,7 +38,7 @@ pub async fn get_cddis_directory_listing(week:u32) -> Result<Json<DirectoryListi
     if response.status().is_success() {
         let directory_listing_text = response.text().await?;
 
-        let mut directory_listing = DirectoryListing::default();
+        let mut directory_listing = DirectoryListing::new(week);
 
         for line in directory_listing_text.lines() {
             let line_parts:Vec<&str> = line.split_whitespace().collect();

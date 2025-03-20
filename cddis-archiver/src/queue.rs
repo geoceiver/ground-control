@@ -24,16 +24,17 @@ pub enum FileError {
 }
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
-pub struct FileRequestError{
+pub struct CDDISFileRequestError{
     error:FileError,
-    file_request:FileRequest,
+    file_request:CDDISFileRequest,
     cddis_size:u64
 }
 
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
-pub struct FileRequest {
-    pub request_queue:FileQueueData,
+pub struct CDDISFileRequest {
+    pub request_queue:CDDISFileQueueData,
+    pub week:u32,
     pub path:String,
     pub hash:String,
     pub archive_path:String,
@@ -41,69 +42,69 @@ pub struct FileRequest {
 }
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
-pub struct FileQueueData {
+pub struct CDDISFileQueueData {
     pub request_id:String,
-    pub week:u32,
+    //pub week:u32,
     pub queue_num:u32,
-    pub enqueued_files:u32,
-    pub awakeable_id:String
+    //pub enqueued_files:u32,
+    //pub awakeable_id:String
 }
 
-impl FileQueueData {
+impl CDDISFileQueueData {
     pub fn get_key(&self) -> String {
-        format!("{}_{}_{}", self.request_id, self.week, self.queue_num)
+        format!("cddis_queue_{}_{}", self.request_id, self.queue_num)
     }
 }
 
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
-pub struct FileQueueStatus {
-    queue:FileQueueData,
+pub struct CDDISFileQueueStatus {
+    queue:CDDISFileQueueData,
     completed_files:u32,
-    file_errors:Vec<FileRequestError>,
+    file_errors:Vec<CDDISFileRequestError>,
     time_started:f64,
     time_completed:Option<f64>,
     last_udpate:Option<f64>
 }
 
 #[restate_sdk::object]
-pub trait ArchiverFileQueue {
-    async fn archive_file(file_request:Json<FileRequest>) -> Result<(), HandlerError>;
+pub trait CDDISArchiverFileQueue {
+    async fn archive_file(file_request:Json<CDDISFileRequest>) -> Result<(), HandlerError>;
 
-    async fn update_manifest(file_request:Json<FileRequest>) -> Result<(), HandlerError>;
+    async fn update_archive_manifest(file_request:Json<CDDISFileRequest>) -> Result<(), HandlerError>;
 
     #[shared]
-    async fn get_status() -> Result<Json<FileQueueStatus>, HandlerError>;
+    async fn get_status() -> Result<Json<CDDISFileQueueStatus>, HandlerError>;
 }
 
-pub struct ArchiverFileQueueImpl;
+pub struct CDDISArchiverFileQueueImpl;
 
-impl ArchiverFileQueue for ArchiverFileQueueImpl {
+impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
 
-    async  fn update_manifest(&self, ctx: ObjectContext<'_>, file_request:Json<FileRequest>) -> Result<(),HandlerError> {
+
+    // this fucntion seralizes status update messages on queue_id_week
+    async  fn update_archive_manifest(&self, ctx: ObjectContext<'_>, file_request:Json<CDDISFileRequest>) -> Result<(),HandlerError> {
 
         let file_request = file_request.into_inner();
-        let mut directory_listing = r2_get_archived_directory_listing(file_request.request_queue.week).await?.into_inner();
+        let mut directory_listing = ctx.run(||r2_get_archived_directory_listing(file_request.week)).await?.into_inner();
 
         directory_listing.add_file(file_request.archive_path, file_request.hash);
 
-        r2_put_archived_directory_listing(file_request.request_queue.week, &directory_listing).await?;
+        r2_put_archived_directory_listing(file_request.week, &directory_listing).await?;
 
         Ok(())
     }
 
-    async  fn archive_file(&self, ctx: ObjectContext<'_> ,file_request:Json<FileRequest>) -> Result<(),HandlerError> {
+    async  fn archive_file(&self, ctx: ObjectContext<'_> ,file_request:Json<CDDISFileRequest>) -> Result<(),HandlerError> {
 
-        let file_request:FileRequest = file_request.into_inner();
+        let file_request:CDDISFileRequest = file_request.into_inner();
 
-        //info!("{}: starting {}", file_request.request_queue.get_key(),  file_request.archive_path);
-
-        let status_response = ctx.get::<Json<FileQueueStatus>>("status").await?;
+        let status_response = ctx.get::<Json<CDDISFileQueueStatus>>("status").await?;
 
         let mut status;
         if !status_response.is_some() {
             let time_started = ctx.run(||current_gpst_seconds()).await?;
-            status = FileQueueStatus {
+            status = CDDISFileQueueStatus {
                 queue: file_request.request_queue.clone(),
                 completed_files: 0,
                 file_errors: Vec::new(),
@@ -128,7 +129,7 @@ impl ArchiverFileQueue for ArchiverFileQueueImpl {
 
             warn!("file {} too large: {}", file_request.archive_path.to_string(), content_length.unwrap());
 
-            let file_error = FileRequestError {
+            let file_error = CDDISFileRequestError {
                 error:FileError::FileTooLarge(content_length.unwrap()),
                 file_request: file_request.clone(),
                 cddis_size: content_length.unwrap() as u64
@@ -141,8 +142,6 @@ impl ArchiverFileQueue for ArchiverFileQueueImpl {
             let bucket = r2_cddis_bucket();
             let credentials = r2_credentials();
 
-            info!("file: {}", file_request.archive_path);
-
             let put_object = bucket.put_object(Some(&credentials), &file_request.archive_path);
             let put_url = put_object.sign(Duration::from_secs(30));
 
@@ -153,7 +152,7 @@ impl ArchiverFileQueue for ArchiverFileQueueImpl {
                 !result.unwrap().status().is_success() {
 
                 // TODO need to refine error logging
-                let file_error = FileRequestError {
+                let file_error = CDDISFileRequestError {
                     error:FileError::UploadError,
                     file_request: file_request.clone(),
                     cddis_size: content_length.unwrap() as u64
@@ -162,11 +161,9 @@ impl ArchiverFileQueue for ArchiverFileQueueImpl {
             }
             else {
                 // send success message to update_manifest to serialize updates per week directory
-                // if we could this is a sideways attempt at fanning in messages from multiple queues
-                // despite lack of support from rust sdk
 
-                let week_key = format!("cddis_week_{}", status.queue.week);
-                ctx.object_client::<ArchiverFileQueueClient>(week_key).update_manifest(Json(file_request.clone())).send();
+                let week_key = format!("{}_{}", status.queue.get_key(), file_request.week);
+                ctx.object_client::<CDDISArchiverFileQueueClient>(week_key).update_archive_manifest(Json(file_request.clone())).send();
             }
 
         }
@@ -175,12 +172,11 @@ impl ArchiverFileQueue for ArchiverFileQueueImpl {
 
         ctx.set("status", Json(status.clone()));
 
-        if status.completed_files == status.queue.enqueued_files {
-            ctx.resolve_awakeable(&status.queue.awakeable_id, "".to_string());
-        }
+        // if status.completed_files == status.queue.enqueued_files {
+        //     ctx.resolve_awakeable(&status.queue.awakeable_id, "".to_string());
+        // }
 
-        //info!("{}: uploaded {}", file_request.request_queue.get_key(), file_request.archive_path);
-        info!("{}: {} / {}", file_request.request_queue.get_key(), status.completed_files, status.queue.enqueued_files);
+        info!("{}: {}", file_request.archive_path, status.completed_files);
 
         // commmenting out multipart uploads pending implementation on r2
         //
@@ -278,9 +274,9 @@ impl ArchiverFileQueue for ArchiverFileQueueImpl {
         Ok(())
     }
 
-    async  fn get_status(&self, ctx: SharedObjectContext<'_>) -> Result<Json<FileQueueStatus> ,HandlerError> {
+    async  fn get_status(&self, ctx: SharedObjectContext<'_>) -> Result<Json<CDDISFileQueueStatus> ,HandlerError> {
 
-        let status = ctx.get::<Json<FileQueueStatus>>("status").await?;
+        let status = ctx.get::<Json<CDDISFileQueueStatus>>("status").await?;
         if status.is_some() {
             return Ok(status.unwrap());
         }

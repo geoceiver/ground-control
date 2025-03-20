@@ -69,7 +69,7 @@ pub async fn r2_get_archived_directory_listing(week:u32) -> Result<Json<Director
         return Ok(Json(archived_listing));
     }
     else if status_code == StatusCode::NOT_FOUND {
-        return Ok(Json(DirectoryListing::default()));
+        return Ok(Json(DirectoryListing::new(week)));
     }
 
     return Err(TerminalError::new("Unable to load archived directory listing.").into());
