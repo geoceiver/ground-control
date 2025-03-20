@@ -88,11 +88,7 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
         let file_request = file_request.into_inner();
         let mut directory_listing = ctx.run(||r2_get_archived_directory_listing(file_request.week)).await?.into_inner();
 
-        warn!("xx {} adding file to manifest: {} ({})", ctx.key(), &file_request.archive_path, directory_listing.files.len());
-
         directory_listing.add_file(file_request.archive_path.to_string(), file_request.hash);
-
-        warn!("yy {} adding file to manifest: {} ({})", ctx.key(), &file_request.archive_path, directory_listing.files.len());
 
         r2_put_archived_directory_listing(file_request.week, &directory_listing).await?;
 
@@ -155,8 +151,6 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
             if !result.is_ok() ||
                 !result.unwrap().status().is_success() {
 
-                warn!("file upload error for: {}", file_request.archive_path);
-
                 // TODO need to refine error logging
                 let file_error = CDDISFileRequestError {
                     error:FileError::UploadError,
@@ -168,9 +162,7 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
             else {
 
                 // send success message to update_manifest to serialize updates per week directory
-                let week_key = format!("{}_{}", status.queue.get_key(), file_request.week);
-
-                info!("sending update manifest for {} ({})", file_request.archive_path, week_key);
+                let week_key = format!("{}_{}", status.queue.request_id, file_request.week);
 
                 ctx.object_client::<CDDISArchiverFileQueueClient>(week_key).update_archive_manifest(Json(file_request.clone())).send();
             }
