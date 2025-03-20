@@ -151,6 +151,8 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
             if !result.is_ok() ||
                 !result.unwrap().status().is_success() {
 
+                warn!("file upload error for: {}", file_request.archive_path);
+
                 // TODO need to refine error logging
                 let file_error = CDDISFileRequestError {
                     error:FileError::UploadError,
@@ -160,9 +162,12 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
                 status.file_errors.push(file_error);
             }
             else {
-                // send success message to update_manifest to serialize updates per week directory
 
+                // send success message to update_manifest to serialize updates per week directory
                 let week_key = format!("{}_{}", status.queue.get_key(), file_request.week);
+
+                info!("sending update manifest for {} ({})", file_request.archive_path, week_key);
+
                 ctx.object_client::<CDDISArchiverFileQueueClient>(week_key).update_archive_manifest(Json(file_request.clone())).send();
             }
 
