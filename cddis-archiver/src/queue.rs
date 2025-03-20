@@ -88,7 +88,11 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
         let file_request = file_request.into_inner();
         let mut directory_listing = ctx.run(||r2_get_archived_directory_listing(file_request.week)).await?.into_inner();
 
-        directory_listing.add_file(file_request.archive_path, file_request.hash);
+        warn!("xx adding file to manifest: {} ({})", &file_request.archive_path, directory_listing.files.len());
+
+        directory_listing.add_file(file_request.archive_path.to_string(), file_request.hash);
+
+        warn!("xx adding file to manifest: {} ({})", &file_request.archive_path, directory_listing.files.len());
 
         r2_put_archived_directory_listing(file_request.week, &directory_listing).await?;
 
