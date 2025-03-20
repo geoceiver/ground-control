@@ -1,4 +1,4 @@
-use std::{cmp, collections::BTreeMap, fmt::Debug, sync::Arc};
+use std::{cmp, collections::BTreeMap, fmt::Debug, sync::Arc, time::Duration};
 use ground_control::gpst::{current_gpst_seconds, current_gpst_week};
 use restate_sdk::{prelude::*,serde::Json,errors::{HandlerError, TerminalError}};
 use serde_with::serde_as;
@@ -8,21 +8,21 @@ use tracing::info;
 use crate::{cddis::{get_archive_file_path, get_cddis_directory_listing, get_cddis_file_path}, queue::{CDDISArchiverFileQueueClient, CDDISFileQueueData, CDDISFileRequest}, r2::r2_get_archived_directory_listing};
 
 const MIN_GPST_WEEKS: u32 = 2238; // CDDIS format changed for products prior to week 2238
-const DEFAULT_WEEK_LOOKBACK_PERIOD: u32 = 12; // defualt
-
+const DEFAULT_WEEK_LOOKBACK_PERIOD: u32 = 12;
 
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct DirectoryListing {
-    week:u32,
+    pub week:Option<u32>,
     #[serde_as(as = "Vec<(_, _)>")]
-    files: BTreeMap<String, String>,
+    pub files: BTreeMap<String, String>,
 }
 
 impl DirectoryListing {
 
+
     pub fn new(week:u32) -> Self {
-        DirectoryListing {week, files:BTreeMap::new()}
+        DirectoryListing {week:Some(week), files:BTreeMap::new()}
     }
 
     pub fn contains(&self, item:&DirectoryListingItem) -> DirectoryListingItemStatus {
@@ -46,7 +46,7 @@ impl DirectoryListing {
 
     pub fn into_iter(&self) -> impl Iterator<Item = DirectoryListingItem> {
         self.files.iter().map(|f|
-            DirectoryListingItem {week:self.week, filename: f.0.to_string(), hash:f.1.to_string()})
+            DirectoryListingItem {week:self.week.unwrap(), filename: f.0.to_string(), hash:f.1.to_string()})
         .collect::<Vec<DirectoryListingItem>>()
         .into_iter()
     }
@@ -60,6 +60,7 @@ impl DirectoryListing {
         let filename = filename_parts.last().unwrap().to_string();
         self.files.insert(filename, hash);
     }
+
 }
 
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
@@ -105,13 +106,20 @@ pub struct CDDISArchiveRequest {
     pub weeks:Option<CDDISArchiveWeeks>,
     pub parallelism:Option<u32>,
     pub process_files:Option<bool>,
-    pub recurring:Option<bool>,
+    pub recurring:Option<u64>, // seconds
 }
 
 impl CDDISArchiveRequest {
 
     fn get_key(&self) -> String {
         format!("{}", self.request_id)
+    }
+
+    fn get_next_request(&self, request_id:String) -> Self {
+        let mut next_request = self.clone();
+        next_request.request_id = request_id;
+
+        return next_request;
     }
 
     fn weeks_with_default(&self) -> CDDISArchiveWeeks {
@@ -125,10 +133,6 @@ impl CDDISArchiveRequest {
 
     fn process_files_with_default(&self) -> bool {
         self.process_files.unwrap_or(false)
-    }
-
-    fn recurring_with_default(&self) -> bool {
-        self.recurring.unwrap_or(false)
     }
 
     fn num_weeks(&self, current_week:u32) -> u32 {
@@ -220,7 +224,7 @@ impl CDDISArchiveWeekWorkflow for CDDISArchiveWeekWorkflowImpl {
 
         let archive_week_request = archive_week_request.into_inner();
         let week = archive_week_request.week;
-         info!("starting week: {}", week);
+        info!("starting week: {}", week);
 
         let last_update_started = ctx.run(||current_gpst_seconds()).await?;
 
@@ -268,6 +272,7 @@ impl CDDISArchiveWeekWorkflow for CDDISArchiveWeekWorkflowImpl {
 
         ctx.set("status", Json(status.clone()));
 
+        info!("set status");
         if pending_files.len() > 0 {
 
             let chunk_size;
@@ -348,7 +353,7 @@ pub struct CDDISArchiverWorkflowImpl;
 
 impl CDDISArchiverWorkflow for CDDISArchiverWorkflowImpl {
 
-    async fn run(&self, ctx: WorkflowContext<'_>, archive_request:Json<CDDISArchiveRequest>) -> Result<(), HandlerError> {
+    async fn run(&self, mut ctx: WorkflowContext<'_>, archive_request:Json<CDDISArchiveRequest>) -> Result<(), HandlerError> {
 
         let archive_request:CDDISArchiveRequest = archive_request.into_inner();
 
@@ -375,8 +380,6 @@ impl CDDISArchiverWorkflow for CDDISArchiverWorkflowImpl {
 
         for week_request in archive_request.week_requests(current_week) {
 
-
-
             // tood handle failures in workflow status
             let result = ctx.workflow_client::<CDDISArchiveWeekWorkflowClient>(week_request.get_key())
                 .run(Json(week_request.clone())).call().await;
@@ -391,6 +394,19 @@ impl CDDISArchiverWorkflow for CDDISArchiverWorkflowImpl {
             }
 
             ctx.set("status", Json(status));
+
+        }
+
+        if archive_request.recurring.is_some() {
+
+            let recurring_delay = archive_request.recurring.unwrap();
+            info!("queuing next archival workflow in {} seconds...", recurring_delay);
+            let next_request_id = ctx.rand_uuid();
+            let next_archive_request = archive_request.get_next_request(next_request_id.to_string());
+            ctx.workflow_client::<CDDISArchiverWorkflowClient>(next_archive_request.get_key())
+                .run(Json(next_archive_request))
+                .send_after(Duration::from_secs(recurring_delay));
+
         }
 
         Ok(())

@@ -36,9 +36,9 @@ impl CDDSArchiverFullTestWorkflow for CDDISArchiverFullTestWorkflowImpl {
         let archive_request = CDDISArchiveRequest {
             request_id: request_id.clone(),
             parallelism: Some(25),
-            weeks: Some(CDDISArchiveWeeks::RecentWeeks(3)),
+            weeks: Some(CDDISArchiveWeeks::AllWeeks),
             process_files: Some(false),
-            recurring: Some(false)
+            recurring: Some(60*5)
         };
 
         info!("starting job: {:?}", archive_request);

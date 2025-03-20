@@ -1,4 +1,4 @@
-use cddis_archiver::queue::{ArchiverFileQueue, ArchiverFileQueueClient, ArchiverFileQueueImpl, FileQueueData, FileRequest};
+use cddis_archiver::queue::{CDDISArchiverFileQueue, CDDISArchiverFileQueueClient, CDDISArchiverFileQueueImpl, CDDISFileQueueData, CDDISFileRequest};
 use restate_sdk::prelude::*;
 use restate_sdk_test_env::TestContainer;
 use tracing::info;
@@ -18,24 +18,20 @@ impl ArchiverTestWorkflow for ArchiverTestWorkflowImpl {
 
     async fn run(&self, mut ctx: WorkflowContext<'_>) ->  Result<(),HandlerError>  {
 
-        let (awakeable_id, promise) = ctx.awakeable::<String>();
-
         let request_id = format!("test_{}", ctx.rand_uuid());
 
         info!("test_id: {}", request_id);
 
-        let queue_data = FileQueueData {
+        let queue_data = CDDISFileQueueData {
             request_id: request_id.clone(),
-            week: 2365,
-            queue_num: 1,
-            enqueued_files: 1,
-            awakeable_id,
+            queue_num: 1
         };
 
         let archive_path = format!("test_data/{}_COD0OPSULT_20250640000_02D_05M_ORB.SP3.gz", request_id);
 
-        let file_request = FileRequest {
+        let file_request = CDDISFileRequest {
             request_queue: queue_data.clone(),
+            week: 2356,
             path: "https://cddis.nasa.gov/archive/gnss/products/2356/COD0OPSULT_20250640000_02D_05M_ORB.SP3.gz".to_string(),
             hash: "13d957c5404d8868f9da1b545d406909b2ab0b5869aea29a866b47eb1ea0e1fc016ac7939d438f8256cdae84173775b2d67f87a35cb771331bde9c0d940974e6".to_string(),
             archive_path,
@@ -44,11 +40,9 @@ impl ArchiverTestWorkflow for ArchiverTestWorkflowImpl {
 
         info!("sending test file request...");
 
-        ctx.object_client::<ArchiverFileQueueClient>(request_id).archive_file(Json(file_request)).send();
+        ctx.object_client::<CDDISArchiverFileQueueClient>(request_id).archive_file(Json(file_request)).send();
 
         info!("awaiting test file request...");
-
-        promise.await?;
 
         info!("test complete...");
 
@@ -74,7 +68,7 @@ async fn cddis_r2_transfer_test() {
     }
 
     let endpoint = Endpoint::builder()
-        .bind(ArchiverFileQueueImpl.serve())
+        .bind(CDDISArchiverFileQueueImpl.serve())
         .bind(ArchiverTestWorkflowImpl.serve())
         .build();
 

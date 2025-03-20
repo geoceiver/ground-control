@@ -1,7 +1,6 @@
-use cddis_archiver::{archiver::{ArchiveRequest, ArchiveWeekWorkflow, ArchiveWeekWorkflowImpl, ArchiveWeeks, ArchiverWorkflow, ArchiverWorkflowClient, ArchiverWorkflowImpl}, queue::{ArchiverFileQueue, ArchiverFileQueueClient, ArchiverFileQueueImpl, FileQueueData, FileRequest}};
+use cddis_archiver::{archiver::{CDDISArchiveRequest, CDDISArchiveWeekWorkflow, CDDISArchiveWeekWorkflowImpl, CDDISArchiveWeeks, CDDISArchiverWorkflow, CDDISArchiverWorkflowClient, CDDISArchiverWorkflowImpl}, queue::{CDDISArchiverFileQueue, CDDISArchiverFileQueueImpl}};
 use restate_sdk::prelude::*;
 use restate_sdk_test_env::TestContainer;
-use tracing::info;
 
 
 #[restate_sdk::workflow]
@@ -20,15 +19,15 @@ impl ArchiverFullTestWorkflow for ArchiverFullTestWorkflowImpl {
 
         let request_id = format!("test_{}", ctx.rand_uuid());
 
-        let archive_request = ArchiveRequest {
+        let archive_request = CDDISArchiveRequest {
             request_id: request_id.clone(),
             parallelism: Some(5),
-            weeks: Some(ArchiveWeeks::RecentWeeks(3)),
+            weeks: Some(CDDISArchiveWeeks::RecentWeeks(3)),
             process_files: Some(false),
-            recurring: Some(false)
+            recurring: Some(60)
         };
 
-        ctx.workflow_client::<ArchiverWorkflowClient>(request_id).run(Json(archive_request)).call().await?;
+        ctx.workflow_client::<CDDISArchiverWorkflowClient>(request_id).run(Json(archive_request)).call().await?;
 
         Ok(())
     }
@@ -52,9 +51,9 @@ async fn cddis_workflow_test() {
     }
 
     let endpoint = Endpoint::builder()
-        .bind(ArchiverFileQueueImpl.serve())
-        .bind(ArchiverWorkflowImpl.serve())
-        .bind(ArchiveWeekWorkflowImpl.serve())
+        .bind(CDDISArchiverFileQueueImpl.serve())
+        .bind(CDDISArchiverWorkflowImpl.serve())
+        .bind(CDDISArchiveWeekWorkflowImpl.serve())
         .bind(ArchiverFullTestWorkflowImpl.serve())
         .build();
 
