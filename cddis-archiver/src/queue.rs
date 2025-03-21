@@ -44,10 +44,7 @@ pub struct CDDISFileRequest {
 #[derive(serde::Serialize, serde::Deserialize,Debug, PartialEq, Clone)]
 pub struct CDDISFileQueueData {
     pub request_id:String,
-    //pub week:u32,
     pub queue_num:u32,
-    //pub enqueued_files:u32,
-    //pub awakeable_id:String
 }
 
 impl CDDISFileQueueData {
@@ -82,7 +79,9 @@ pub struct CDDISArchiverFileQueueImpl;
 impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
 
 
-    // this fucntion seralizes status update messages on queue_id_week
+    // this fucntion seralizes status update messages on by week directory
+    // across all archival tasks to prevent parallel requests from overwriting manifest udpates
+
     async  fn update_archive_manifest(&self, ctx: ObjectContext<'_>, file_request:Json<CDDISFileRequest>) -> Result<(),HandlerError> {
 
         let file_request = file_request.into_inner();
@@ -162,7 +161,7 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
             else {
 
                 // send success message to update_manifest to serialize updates per week directory
-                let week_key = format!("{}_{}", status.queue.request_id, file_request.week);
+                let week_key = format!("cddis_queue_{}", file_request.week);
 
                 ctx.object_client::<CDDISArchiverFileQueueClient>(week_key).update_archive_manifest(Json(file_request.clone())).send();
             }
@@ -173,104 +172,7 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
 
         ctx.set("status", Json(status.clone()));
 
-        // if status.completed_files == status.queue.enqueued_files {
-        //     ctx.resolve_awakeable(&status.queue.awakeable_id, "".to_string());
-        // }
-
         info!("{}: {}", file_request.archive_path, status.completed_files);
-
-        // commmenting out multipart uploads pending implementation on r2
-        //
-
-        // let stream = response.bytes_stream().map(|chunk| {
-        //         chunk.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-        //     });
-
-        // let stream_reader = StreamReader::new(stream);
-        // let mut buffered_reader = BufReader::new(stream_reader);
-
-
-
-        // let multpart_upload = bucket.create_multipart_upload(Some(&credentials), &file_request.archive_path);
-        // let create_multipart_url = multpart_upload.sign(Duration::from_secs(30));
-
-        // let response = client.post(create_multipart_url).send().await?;
-        // info!("{:?}", &response);
-        // let resposne_text = response.text().await?;
-        // info!("{}", resposne_text);
-
-
-
-        // let multipart_response = CreateMultipartUpload::parse_response(resposne_text)?;
-        // let upload_id = multipart_response.upload_id();
-
-        // let mut stream_buffer = [0; CHUNK_SIZE];
-
-        // let mut total_bytes_uploaded = 0;
-        // let mut chunk_num = 1;
-
-        // let mut etags:Vec<String> = Vec::new();
-        // let mut current_chunk:Vec<u8> = Vec::new();
-
-        // loop {
-        //     let len = buffered_reader.read(&mut stream_buffer).await?;
-
-        //     current_chunk.append(&mut stream_buffer[..len].to_vec());
-
-        //     if current_chunk.len() >= CHUNK_SIZE ||
-        //         (len == 0 && current_chunk.len() > 0) {
-
-        //         let upload_part = bucket.upload_part(Some(&credentials), &file_request.archive_path, chunk_num, upload_id);
-        //         let upload_part_url = upload_part.sign(Duration::from_secs(30));
-
-        //         let chunk_len;
-        //         if current_chunk.len() > CHUNK_SIZE {
-        //             chunk_len = CHUNK_SIZE;
-        //         }
-        //         else {
-        //             chunk_len = current_chunk.len()
-        //         }
-
-        //         let stream_slice:Vec<u8> = current_chunk[..chunk_len].to_vec();
-        //         let chunk_body = Body::from(stream_slice);
-        //         let response = client.put(upload_part_url)
-        //             .body(chunk_body)
-        //             .send().await?;
-
-        //         if !response.status().is_success() {
-        //             info!("uploaded chunk {} size: {}", chunk_num, len);
-        //         }
-
-        //         let upload_part_etag = response.headers().get("etag").unwrap()
-        //             .to_str().unwrap().to_owned();
-
-        //         etags.push(upload_part_etag);
-
-        //         total_bytes_uploaded += len;
-        //         chunk_num += 1;
-        //         info!("uploaded chunk {} size: {}", chunk_num, len);
-        //     }
-
-        //     if len == 0 {
-        //         break;
-        //     }
-        // }
-
-        // let etag_strs = etags.iter().map(|s|s.as_str());
-        // let complete_upload = bucket.complete_multipart_upload(Some(&credentials), &file_request.archive_path, upload_id, etag_strs);
-        // let complete_upload_url = complete_upload.sign(Duration::from_secs(60));
-        // let complete_body = complete_upload.body();
-
-        // let response = client.post(complete_upload_url).body(complete_body)
-        //     .send().await?;
-
-        // if !response.status().is_success() {
-        //     let response_text = response.text().await?;
-        //     info!("upload complete failed: {}", response_text);
-        //     //info!("{:?}", response.status());
-        // }
-
-        // info!("total uploaded bytes: {}", total_bytes_uploaded);
 
         Ok(())
     }
