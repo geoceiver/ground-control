@@ -31,7 +31,10 @@ impl CDDSArchiverFullTestWorkflow for CDDISArchiverFullTestWorkflowImpl {
 
     async fn run(&self, mut ctx: WorkflowContext<'_>) ->  Result<(),HandlerError>  {
 
-        let request_id = format!("test_{}", ctx.rand_uuid());
+        let task_id = ctx.rand_uuid();
+        let workflow_id = ctx.key();
+
+        let request_id = format!("{}_{}", workflow_id, task_id);
 
         let archive_request = CDDISArchiveRequest {
             request_id: request_id.clone(),
