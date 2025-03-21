@@ -144,10 +144,10 @@ impl CDDISArchiveRequest {
         let archive_weeks:Vec<u32>;
         match self.weeks.as_ref().unwrap() {
             CDDISArchiveWeeks::AllWeeks => {
-                archive_weeks = (MIN_GPST_WEEKS..current_week).collect()
+                archive_weeks = (MIN_GPST_WEEKS..=current_week).collect()
             },
             CDDISArchiveWeeks::RecentWeeks(look_back_period) => {
-                archive_weeks = ((current_week-look_back_period)..current_week).collect()
+                archive_weeks = ((current_week-look_back_period)..=current_week).collect()
             },
             CDDISArchiveWeeks::WeeksList(weeks) => {
                 archive_weeks = weeks.clone();

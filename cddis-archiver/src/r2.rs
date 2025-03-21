@@ -3,7 +3,6 @@ use std::{env, time::Duration};
 use reqwest::{StatusCode, Url};
 use restate_sdk::{errors::{HandlerError, TerminalError}, serde::Json};
 use rusty_s3::{Bucket, Credentials, S3Action as _, UrlStyle};
-use tracing::info;
 
 use crate::{archiver::DirectoryListing, cddis::get_archive_file_path, utils::build_reqwest_client};
 
@@ -62,8 +61,6 @@ pub async fn r2_get_archived_directory_listing(week:u32) -> Result<Json<Director
 
     let client = build_reqwest_client()?;
     let response = client.get(listing_url).send().await?;
-
-    info!("request r2 archive");
 
     let archived_listing:DirectoryListing;
     let status_code = response.status();
