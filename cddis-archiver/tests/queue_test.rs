@@ -20,14 +20,12 @@ impl ArchiverTestWorkflow for ArchiverTestWorkflowImpl {
 
         let request_id = format!("test_{}", ctx.rand_uuid());
 
-        info!("test_id: {}", request_id);
-
         let queue_data = CDDISFileQueueData {
             request_id: request_id.clone(),
             queue_num: 1
         };
 
-        let archive_path = format!("test_data/{}_COD0OPSULT_20250640000_02D_05M_ORB.SP3.gz", request_id);
+        let archive_path = format!("/test_data/{}_COD0OPSULT_20250640000_02D_05M_ORB.SP3.gz", request_id);
 
         let file_request = CDDISFileRequest {
             request_queue: queue_data.clone(),
@@ -40,9 +38,11 @@ impl ArchiverTestWorkflow for ArchiverTestWorkflowImpl {
 
         info!("sending test file request...");
 
-        ctx.object_client::<CDDISArchiverFileQueueClient>(request_id).archive_file(Json(file_request)).send();
+        let response = ctx.object_client::<CDDISArchiverFileQueueClient>(request_id).archive_file(Json(file_request)).call();
 
         info!("awaiting test file request...");
+
+        response.await?;
 
         info!("test complete...");
 

@@ -1,13 +1,13 @@
 use std::time::Duration;
 
 use ground_control::gpst::current_gpst_seconds;
+use object_store::{path::Path, ObjectStore, PutPayload};
 use reqwest::Body;
 use restate_sdk::prelude::*;
 use futures_util::{StreamExt, TryStreamExt};
-use rusty_s3::{actions::CreateMultipartUpload, S3Action};
 
 use tracing::{info, warn};
-use crate::{r2::{r2_cddis_bucket, r2_credentials, r2_get_archived_directory_listing, r2_put_archived_directory_listing}, utils::build_reqwest_client};
+use crate::{r2::{r2_cddis_bucket, r2_get_archived_directory_listing, r2_put_archived_directory_listing}, utils::build_reqwest_client};
 
 //const CHUNK_SIZE:usize = 100_000;
 const MAX_FILE_SIZE:u64 = 100_000_000;
@@ -98,6 +98,8 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
 
         let file_request:CDDISFileRequest = file_request.into_inner();
 
+        info!("file_request: {:?}", file_request);
+
         let status_response = ctx.get::<Json<CDDISFileQueueStatus>>("status").await?;
 
         let mut status;
@@ -121,9 +123,16 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
 
         let response = client.get(&file_request.path)
             .bearer_auth(std::env::var("EARTHDATA_TOKEN").unwrap())
-            .send().await?;
+            .send().await;
+
+        info!("get response {:?}", response);
+
+        let response = response.unwrap();
 
         let content_length = response.content_length();
+
+        info!("content_length: {}", content_length.unwrap());
+
         if content_length.is_some() && content_length.unwrap() > MAX_FILE_SIZE {
 
             warn!("file {} too large: {}", file_request.archive_path.to_string(), content_length.unwrap());
@@ -138,18 +147,17 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
         }
         else {
 
-            let bucket = r2_cddis_bucket();
-            let credentials = r2_credentials();
+            let r2_bucket = r2_cddis_bucket()?;
 
-            let put_object = bucket.put_object(Some(&credentials), &file_request.archive_path);
-            let put_url = put_object.sign(Duration::from_secs(30));
+            let response = r2_bucket.put(&Path::from_absolute_path(&file_request.archive_path)?, PutPayload::from_bytes(response.bytes().await?)).await;
+            info!("put response: {:?}", response);
+            // let put_object = bucket.put_object(Some(&credentials), );
+            // let put_url = put_object.sign(Duration::from_secs(30));
 
-            // pushing buffer directly...TODO add support for R2's busted multipart uplaods implementation...
-            let result = client.put(put_url).body(response.bytes().await?).send().await;
+            // // pushing buffer directly...TODO add support for R2's busted multipart uplaods implementation...
+            // let result = client.put(put_url).body().send().await;
 
-            if !result.is_ok() ||
-                !result.unwrap().status().is_success() {
-
+            if !response.is_ok() {
                 // TODO need to refine error logging
                 let file_error = CDDISFileRequestError {
                     error:FileError::UploadError,
