@@ -14,7 +14,7 @@ pub fn get_cddis_file_path(week:u32, file_path:&str) -> String {
 }
 
 pub fn get_archive_file_path(week:u32, file_path:&str) -> String {
-    format!("cddis/{}/{}", week, file_path)
+    format!("/cddis/{}/{}", week, file_path)
 }
 
 pub fn cddis_filename_parser(path:&str) -> Option<Captures<'_>> {
