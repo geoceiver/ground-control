@@ -1,4 +1,3 @@
-use regex::{Captures, Regex};
 use restate_sdk::{errors::{HandlerError, TerminalError}, serde::Json};
 
 use crate::{archiver::DirectoryListing, utils::build_reqwest_client};
@@ -9,22 +8,12 @@ fn get_cddis_week_path(week:u32) -> String {
     format!("{}/{}", CDDIS_PATH, week)
 }
 
-pub fn get_cddis_file_path(week:u32, file_path:&str) -> String {
-    format!("{}/{}/{}", CDDIS_PATH, week, file_path)
+pub fn get_cddis_file_path(week:u32, file_name:&str) -> String {
+    format!("{}/{}/{}", CDDIS_PATH, week, file_name)
 }
 
-pub fn get_archive_file_path(week:u32, file_path:&str) -> String {
-    format!("/cddis/{}/{}", week, file_path)
-}
-
-pub fn cddis_filename_parser(path:&str) -> Option<Captures<'_>> {
-    let re = Regex::new(r"^(?<AC>.{3})0(?<PROJ>.{3})(?<TYP>.{3})_(?<TIME>[0-9]{11})_(?<PER>.*)_(?<SMP>.*)_(?<CNT>.*)\.(?<FMT>.*)\.gz$").unwrap();
-    return re.captures(path);
-}
-
-pub fn cddis_path_parser(path:&str) -> Option<Captures<'_>> {
-    let re = Regex::new(r"^(?<WEEK>\d{4})\/(?<AC>.{3})0(?<PROJ>.{3})(?<TYP>.{3})_(?<TIME>[0-9]{11})_(?<PER>.*)_(?<SMP>.*)_(?<CNT>.*)\.(?<FMT>.*)\.gz$").unwrap();
-    return re.captures(path);
+pub fn get_archive_file_path(week:u32, file_name:&str) -> String {
+    format!("/cddis/{}/{}", week, file_name)
 }
 
 pub async fn get_cddis_directory_listing(week:u32) -> Result<Json<DirectoryListing>, HandlerError> {

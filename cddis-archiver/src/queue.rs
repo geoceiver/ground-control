@@ -1,10 +1,6 @@
-use std::time::Duration;
-
-use ground_control::gpst::current_gpst_seconds;
+use ground_control::{data::sp3::{Sp3Data, Sp3DataClient, Sp3File}, gpst::current_gpst_seconds};
 use object_store::{path::Path, ObjectStore, PutPayload};
-use reqwest::Body;
 use restate_sdk::prelude::*;
-use futures_util::{StreamExt, TryStreamExt};
 
 use tracing::{info, warn};
 use crate::{r2::{r2_cddis_bucket, r2_get_archived_directory_listing, r2_put_archived_directory_listing}, utils::build_reqwest_client};
@@ -167,6 +163,13 @@ impl CDDISArchiverFileQueue for CDDISArchiverFileQueueImpl {
                 status.file_errors.push(file_error);
             }
             else {
+
+                if file_request.process_files  {
+                    let sp3_file = Sp3File {source:"cddis".to_string(), archive_path: file_request.archive_path.clone()};
+                    if sp3_file.is_sp3() {
+                        ctx.object_client::<Sp3DataClient>("cddis").process_sp3_file(Json(sp3_file)).send();
+                    }
+                }
 
                 // send success message to update_manifest to serialize updates per week directory
                 let week_key = format!("cddis_queue_{}", file_request.week);

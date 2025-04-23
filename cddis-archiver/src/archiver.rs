@@ -357,6 +357,19 @@ impl CDDISArchiverWorkflow for CDDISArchiverWorkflowImpl {
 
         let archive_request:CDDISArchiveRequest = archive_request.into_inner();
 
+        // moved scheduling next action to top in case of failure during archival
+        if archive_request.recurring.is_some() {
+
+            let recurring_delay = archive_request.recurring.unwrap();
+            info!("queuing next archival workflow in {} seconds...", recurring_delay);
+            let next_request_id = ctx.rand_uuid();
+            let next_archive_request = archive_request.get_next_request(next_request_id.to_string());
+            ctx.workflow_client::<CDDISArchiverWorkflowClient>(next_archive_request.get_key())
+                .run(Json(next_archive_request))
+                .send_after(Duration::from_secs(recurring_delay));
+
+        }
+
         // using workflow for archiver intialization to prevent task duplication
         // each workflow init requires a unique archive task id, used as part of downstream keys
         // currently forcing ArchiveRequest id to match ctx key
@@ -394,18 +407,6 @@ impl CDDISArchiverWorkflow for CDDISArchiverWorkflowImpl {
             }
 
             ctx.set("status", Json(status));
-
-        }
-
-        if archive_request.recurring.is_some() {
-
-            let recurring_delay = archive_request.recurring.unwrap();
-            info!("queuing next archival workflow in {} seconds...", recurring_delay);
-            let next_request_id = ctx.rand_uuid();
-            let next_archive_request = archive_request.get_next_request(next_request_id.to_string());
-            ctx.workflow_client::<CDDISArchiverWorkflowClient>(next_archive_request.get_key())
-                .run(Json(next_archive_request))
-                .send_after(Duration::from_secs(recurring_delay));
 
         }
 

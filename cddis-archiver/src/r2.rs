@@ -1,10 +1,9 @@
 
-use std::{env};
+use std::env;
 use object_store::{aws::{AmazonS3, AmazonS3Builder}, path::Path, Error::NotFound, ObjectStore, PutPayload};
 use restate_sdk::{errors::{HandlerError, TerminalError}, serde::{Json, Serialize}};
 
-use crate::{archiver::DirectoryListing, cddis::get_archive_file_path, utils::build_reqwest_client};
-
+use crate::{archiver::DirectoryListing, cddis::get_archive_file_path};
 
 pub fn r2_cddis_bucket() -> Result<AmazonS3, object_store::Error> {
 
