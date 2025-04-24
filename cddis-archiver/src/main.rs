@@ -18,16 +18,16 @@ mod cddis;
 mod utils;
 
 #[restate_sdk::workflow]
-trait CDDSArchiverFullTestWorkflow {
+trait CDDISArchiverProcessorWorkflow {
     async fn run() -> Result<(), HandlerError>;
 
     #[shared]
     async fn get_status() -> Result<bool, HandlerError>;
 }
 
-struct CDDISArchiverFullTestWorkflowImpl;
+struct CDDISArchiverProcessorWorkflowImpl;
 
-impl CDDSArchiverFullTestWorkflow for CDDISArchiverFullTestWorkflowImpl {
+impl CDDISArchiverProcessorWorkflow for CDDISArchiverProcessorWorkflowImpl {
 
     async fn run(&self, mut ctx: WorkflowContext<'_>) ->  Result<(),HandlerError>  {
 
@@ -40,7 +40,7 @@ impl CDDSArchiverFullTestWorkflow for CDDISArchiverFullTestWorkflowImpl {
             request_id: request_id.clone(),
             parallelism: Some(25),
             weeks: Some(CDDISArchiveWeeks::AllWeeks),
-            process_files: Some(false),
+            process_files: Some(true),
             recurring: Some(60*5)
         };
 
@@ -73,7 +73,7 @@ async fn main() {
         .bind(CDDISArchiverFileQueueImpl.serve())
         .bind(CDDISArchiverWorkflowImpl.serve())
         .bind(CDDISArchiveWeekWorkflowImpl.serve())
-        .bind(CDDISArchiverFullTestWorkflowImpl.serve())
+        .bind(CDDISArchiverProcessorWorkflowImpl.serve())
         .build();
 
     HttpServer::new(endpoint)
