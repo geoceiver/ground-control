@@ -1,6 +1,6 @@
 # Ground Control
 
-A high-performance GNSS data processing and archiving system built with Rust, featuring satellite orbit calculations, real-time position queries, and automated data archiving from NASA's CDDIS.
+A high-performance GNSS data processing and archiving system built with Rust, featuring satellite orbit calculations, real-time position queries, and automated data archiving from NASA's CDDIS corrections data.
 
 ## Overview
 
@@ -15,17 +15,6 @@ The system consists of two main components:
 
 - **Ground Control**: Core library and API for satellite orbit calculations and SP3 file processing
 - **CDDIS Archiver**: High-performance data archiving service with parallel processing
-
-## Architecture
-
-Built using modern Rust technologies:
-
-- **Restate SDK**: Workflow orchestration and durable execution
-- **Tokio**: Async runtime for high-performance I/O
-- **Axum**: Web framework for REST API endpoints
-- **ANISE**: Astrodynamics library for precise orbit calculations
-- **Arrow**: Columnar data structures for efficient SP3 handling
-- **Object Store**: Cloud storage abstraction (AWS S3/Cloudflare R2)
 
 ## Features
 
