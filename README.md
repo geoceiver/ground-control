@@ -12,6 +12,7 @@ Ground Control is a comprehensive GNSS (Global Navigation Satellite System) data
 - **Workflow orchestration** using Restate for reliable, durable execution
 
 The system consists of two main components:
+
 - **Ground Control**: Core library and API for satellite orbit calculations and SP3 file processing
 - **CDDIS Archiver**: High-performance data archiving service with parallel processing
 
@@ -29,6 +30,7 @@ Built using modern Rust technologies:
 ## Features
 
 ### Ground Control Library
+
 - Real-time satellite position queries for any epoch
 - SP3 precision orbit file processing
 - Multi-source GNSS data support (IGS, CODE, etc.)
@@ -37,6 +39,7 @@ Built using modern Rust technologies:
 - RESTful API with HTTP endpoints
 
 ### CDDIS Archiver
+
 - Automated archiving of GNSS products from NASA CDDIS
 - Incremental processing (only new/changed files)
 - Configurable parallel downloads (up to 25 concurrent)
@@ -103,7 +106,7 @@ Content-Type: application/json
 ### Supported Data Sources
 
 - `igs`: International GNSS Service final products
-- `igr`: IGS rapid products  
+- `igr`: IGS rapid products
 - `cod`: Center for Orbit Determination products
 - Custom sources via configuration
 
@@ -177,11 +180,3 @@ The system runs two HTTP servers:
 - **CDDIS Archiver**: `0.0.0.0:9080` (Restate workflows)
 
 Both services require environment variables for authentication and cloud storage access.
-
-## License
-
-[Add license information]
-
-## Contributing
-
-[Add contribution guidelines]
