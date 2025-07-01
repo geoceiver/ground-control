@@ -1,6 +1,6 @@
 # Ground Control
 
-A high-performance GNSS data processing and archiving system built with Rust, featuring satellite orbit calculations, real-time position queries, and automated data archiving from NASA's CDDIS corrections data.
+A high-performance GNSS data processing and archiving system built with Rust, featuring satellite orbit calculations, real-time position queries, and automated data archiving from NASA's CDDIS orbit and clock corrections data.
 
 ## Overview
 
