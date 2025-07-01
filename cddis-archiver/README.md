@@ -1,6 +1,6 @@
 # CDDIS Archiver
 
-A high-performance Rust application for archiving GNSS data from NASA's Crustal Dynamics Data Information System (CDDIS) using Restate workflows for data processing and and Cloudflare R2 for storage.
+A high-performance Rust application for archiving GNSS data from NASA's Crustal Dynamics Data Information System (CDDIS) using Restate workflows for data processing and Cloudflare R2 for storage.
 
 ## Overview
 
@@ -95,15 +95,6 @@ cargo test --test full_archive_test
 cargo test --test queue_test
 ```
 
-## Data Flow
-
-1. **Discovery**: Fetch directory listings from CDDIS using SHA512SUMS files
-2. **Comparison**: Compare remote files with archived data using hash validation
-3. **Queueing**: Create processing queues for missing or changed files
-4. **Download**: Parallel download of files with validation
-5. **Storage**: Upload validated files to cloud storage with metadata
-6. **Processing**: Optional SP3 file processing for GNSS analysis
-
 ## File Structure
 
 ```
@@ -120,37 +111,3 @@ tests/
 ├── full_archive_test.rs  # Integration tests
 └── queue_test.rs         # Queue processing tests
 ```
-
-## Error Handling
-
-The application includes comprehensive error handling:
-
-- **File Errors**: Not found, too large, hash mismatch, upload failures
-- **Network Errors**: Connection timeouts, authentication failures
-- **Workflow Errors**: State management, retry logic, terminal errors
-
-## Performance
-
-- **Memory Management**: Uses jemalloc for optimized memory allocation
-- **Async Processing**: Fully async with configurable parallelism
-- **Streaming Downloads**: Efficient memory usage for large files
-- **Connection Pooling**: Reuses HTTP connections for better performance
-
-## Monitoring
-
-The application provides:
-
-- Structured logging with tracing
-- Workflow status endpoints
-- Error tracking and reporting
-- Progress monitoring for long-running jobs
-
-## GPS Week Support
-
-- Supports GPS weeks from 2238 onwards (when CDDIS format standardized)
-- Current week detection using GPST (GPS System Time)
-- Automatic week range validation and adjustment
-
-## License
-
-This project is part of the Urban Traction ground control system.
