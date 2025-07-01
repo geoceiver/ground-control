@@ -1,0 +1,31 @@
+[package]
+name = "ground-control"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anise = "0.5.3"
+anyhow = "1.0.97"
+arrow = "55.0.0"
+arrow-array = "55.0.0"
+arrow-buffer = "55.0.0"
+arrow-data = "55.0.0"
+arrow-schema = "55.0.0"
+axum = "0.8.3"
+bytes = {version = "1.10.1", features = ["std"]}
+dotenvy = "0.15.7"
+flate2 = "1.1.1"
+hifitime = "4.0.2"
+object_store = {version = "0.12.0", features = ["aws"]}
+regex = "1.11.1"
+reqwest = {version = "0.12.14",  features=["stream", "multipart", "rustls-tls", "json"]}
+restate-sdk = { version = "0.4.0", path = "../../sdk-rust" }
+serde = "1.0.219"
+serde_json = "1.0.140"
+sp3 = "1.1.2"
+tokio = {version = "1.44.1",  features = ["full"] }
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
+
+[dev-dependencies]
+restate-sdk-test-env = { path = "../../sdk-rust/test-env" }
