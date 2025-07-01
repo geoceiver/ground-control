@@ -6,8 +6,8 @@ use tikv_jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 
 
-use archiver::{CDDISArchiveRequest, CDDISArchiveWeekWorkflow, CDDISArchiveWeekWorkflowImpl, CDDISArchiveWeeks, CDDISArchiverWorkflow, CDDISArchiverWorkflowClient, CDDISArchiverWorkflowImpl};
-use queue::{CDDISArchiverFileQueue, CDDISArchiverFileQueueImpl};
+use archiver::{CDDISArchiveRequestWeekRange, CDDISArchiveRequest, CDDISWeekWorkflow, CDDISWeekWorkflowImpl, CDDISArchiverWorkflow, CDDISArchiverWorkflowClient, CDDISArchiverWorkflowImpl};
+use queue::{CDDISFileQueue, CDDISFileQueueImpl};
 use restate_sdk::prelude::*;
 use tracing::info;
 
@@ -18,16 +18,16 @@ mod cddis;
 mod utils;
 
 #[restate_sdk::workflow]
-trait CDDISArchiverProcessorWorkflow {
+trait CDDISWorkflow {
     async fn run() -> Result<(), HandlerError>;
 
     #[shared]
     async fn get_status() -> Result<bool, HandlerError>;
 }
 
-struct CDDISArchiverProcessorWorkflowImpl;
+struct CDDISWorkflowImpl;
 
-impl CDDISArchiverProcessorWorkflow for CDDISArchiverProcessorWorkflowImpl {
+impl CDDISWorkflow for CDDISWorkflowImpl {
 
     async fn run(&self, mut ctx: WorkflowContext<'_>) ->  Result<(),HandlerError>  {
 
@@ -39,7 +39,7 @@ impl CDDISArchiverProcessorWorkflow for CDDISArchiverProcessorWorkflowImpl {
         let archive_request = CDDISArchiveRequest {
             request_id: request_id.clone(),
             parallelism: Some(25),
-            weeks: Some(CDDISArchiveWeeks::AllWeeks),
+            weeks: Some(CDDISArchiveRequestWeekRange::AllWeeks),
             process_files: Some(true),
             recurring: Some(60*5)
         };
@@ -51,7 +51,7 @@ impl CDDISArchiverProcessorWorkflow for CDDISArchiverProcessorWorkflowImpl {
         Ok(())
     }
 
-    async  fn get_status(&self, ctx: SharedWorkflowContext<'_>) -> Result<bool,HandlerError> {
+    async  fn get_status(&self, _ctx: SharedWorkflowContext<'_>) -> Result<bool,HandlerError> {
 
         Ok(true)
     }
@@ -70,10 +70,10 @@ async fn main() {
     }
 
     let endpoint = Endpoint::builder()
-        .bind(CDDISArchiverFileQueueImpl.serve())
+        .bind(CDDISFileQueueImpl.serve())
+        .bind(CDDISWeekWorkflowImpl.serve())
         .bind(CDDISArchiverWorkflowImpl.serve())
-        .bind(CDDISArchiveWeekWorkflowImpl.serve())
-        .bind(CDDISArchiverProcessorWorkflowImpl.serve())
+        .bind(CDDISWorkflowImpl.serve())
         .build();
 
     HttpServer::new(endpoint)

@@ -1,4 +1,4 @@
-use cddis_archiver::{archiver::{CDDISArchiveRequest, CDDISArchiveWeekWorkflow, CDDISArchiveWeekWorkflowImpl, CDDISArchiveWeeks, CDDISArchiverWorkflow, CDDISArchiverWorkflowClient, CDDISArchiverWorkflowImpl}, queue::{CDDISArchiverFileQueue, CDDISArchiverFileQueueImpl}};
+use cddis_archiver::{archiver::{CDDISArchiveRequest, CDDISWeekWorkflow, CDDISWeekWorkflowImpl, CDDISArchiveRequestWeekRange, CDDISArchiverWorkflow, CDDISArchiverWorkflowClient, CDDISArchiverWorkflowImpl}, queue::{CDDISFileQueue, CDDISFileQueueImpl}};
 use restate_sdk::prelude::*;
 use restate_sdk_test_env::TestContainer;
 
@@ -22,7 +22,7 @@ impl ArchiverFullTestWorkflow for ArchiverFullTestWorkflowImpl {
         let archive_request = CDDISArchiveRequest {
             request_id: request_id.clone(),
             parallelism: Some(5),
-            weeks: Some(CDDISArchiveWeeks::RecentWeeks(3)),
+            weeks: Some(CDDISArchiveRequestWeekRange::RecentWeeks(3)),
             process_files: Some(false),
             recurring: Some(60)
         };
@@ -51,9 +51,9 @@ async fn cddis_workflow_test() {
     }
 
     let endpoint = Endpoint::builder()
-        .bind(CDDISArchiverFileQueueImpl.serve())
+        .bind(CDDISFileQueueImpl.serve())
         .bind(CDDISArchiverWorkflowImpl.serve())
-        .bind(CDDISArchiveWeekWorkflowImpl.serve())
+        .bind(CDDISWeekWorkflowImpl.serve())
         .bind(ArchiverFullTestWorkflowImpl.serve())
         .build();
 

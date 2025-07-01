@@ -1,4 +1,4 @@
-use cddis_archiver::queue::{CDDISArchiverFileQueue, CDDISArchiverFileQueueClient, CDDISArchiverFileQueueImpl, CDDISFileQueueData, CDDISFileRequest};
+use cddis_archiver::queue::{CDDISFileQueue, CDDISFileQueueClient, CDDISFileQueueImpl, CDDISFileQueueData, CDDISFileRequest};
 use restate_sdk::prelude::*;
 use restate_sdk_test_env::TestContainer;
 use tracing::info;
@@ -38,7 +38,7 @@ impl ArchiverTestWorkflow for ArchiverTestWorkflowImpl {
 
         info!("sending test file request...");
 
-        let response = ctx.object_client::<CDDISArchiverFileQueueClient>(request_id).archive_file(Json(file_request)).call();
+        let response = ctx.object_client::<CDDISFileQueueClient>(request_id).archive_file(Json(file_request)).call();
 
         info!("awaiting test file request...");
 
@@ -68,7 +68,7 @@ async fn cddis_r2_transfer_test() {
     }
 
     let endpoint = Endpoint::builder()
-        .bind(CDDISArchiverFileQueueImpl.serve())
+        .bind(CDDISFileQueueImpl.serve())
         .bind(ArchiverTestWorkflowImpl.serve())
         .build();
 
