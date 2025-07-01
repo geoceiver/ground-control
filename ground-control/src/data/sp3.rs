@@ -1,5 +1,4 @@
 use std::{env, io::BufReader, sync::Arc};
-
 use anise::math::Vector3;
 use anyhow::anyhow;
 use arrow::compute::kernels::filter;
@@ -19,12 +18,14 @@ use crate::product::sv::{DataSource, Orbit, SVOrbitsClient, SVSource};
 
 pub fn r2_cddis_bucket() -> Result<AmazonS3, object_store::Error> {
 
+    let r2_path = env::var("R2_PATH").expect("R2 path is set and a vaild String");
+    let r2_region = env::var("R2_REGION").expect("R2 region is set and a vaild String");
     let key = env::var("AWS_ACCESS_KEY_ID").expect("AWS_ACCESS_KEY_ID is set and a valid String");
     let secret = env::var("AWS_SECRET_ACCESS_KEY").expect("AWS_ACCESS_KEY_ID is set and a valid String");
 
     AmazonS3Builder::new()
-        .with_url("https://35bb40698ef5bd005fe8af515201e351.r2.cloudflarestorage.com/geoceiver-archive-enam")
-        .with_region("enam")
+        .with_url(r2_path)
+        .with_region(r2_region)
         .with_access_key_id(key)
         .with_secret_access_key(secret)
         .build()
@@ -47,71 +48,7 @@ pub struct Sp3Table {
 impl Sp3Table {
 
     pub fn new(table_name:String) -> Sp3Table {
-        Sp3Table {table_name}
-    }
-
-    // async fn create_table(&self) -> Result<Table, lancedb::Error> {
-
-    //     let schema = Self::arrow_schema();
-
-    //     let batches = RecordBatchIterator::new(
-    //         vec![]
-    //         .into_iter()
-    //         .map(Ok),
-    //         schema.clone(),
-    //     );
-
-
-    // }
-
-    pub async fn update_table(&self, record_batch:RecordBatch) -> Result<(), anyhow::Error> {
-        // info!("adding records: {}", record_batch.num_rows());
-
-        // let schema = Self::arrow_schema();
-
-        // let batches = RecordBatchIterator::new(
-        //     vec![record_batch]
-        //     .into_iter()
-        //     .map(Ok),
-        //     schema.clone(),
-        // );
-
-        // let list_tables = self.db.table_names().execute().await?;
-
-        // info!("existing table names: {:?}", list_tables);
-
-        // info!("current table name: {}", self.table_name);
-
-        // let table = self.db.open_table(&self.table_name).execute().await;
-
-        // if let Err(table_error) = table {
-        //     match table_error {
-        //         lancedb::Error::TableNotFound { name: name } => {
-        //             info!("creatiing table... {}", name);
-        //             //let table = self.create_table().await?;
-
-        //             let table = self.db.create_table(&self.table_name, batches).execute().await?;
-
-        //             // table.create_index(&["gpst_seconds"], lancedb::index::Index::BTree(Default::default())).execute().await?;
-        //             // table.create_index(&["satellite"], lancedb::index::Index::Bitmap(Default::default())).execute().await?;
-        //             // table.create_index(&["constellation"], lancedb::index::Index::Bitmap(Default::default())).execute().await?;
-
-        //             info!("rows added to new table...");
-        //             return Ok(());
-
-        //         }
-        //         _ => {
-        //             info!("failed to create table...");
-        //             return Err(table_error);
-        //         }
-        //     }
-        // }
-
-        // info!("table exists adding rows...");
-
-        // table.unwrap().add(batches).execute().await?;
-
-        Ok(())
+        Sp3Table {table_name: table_name}
     }
 
     pub async fn load_sp3_file(&self, sp3_file:&Sp3File) -> Result<RecordBatch, anyhow::Error> {
@@ -182,15 +119,6 @@ impl Sp3Table {
             ).unwrap();
 
 
-        //self.update_table(record_batch).await?;
-
-        //let table = self.db.create_table(self.table_name.clone(), batches).execute().await?;
-
-        //self.get_table().await?.add(batches).execute().await?;
-
-        //let builder = IvfHnswPqIndexBuilder::default().distance_type(DistanceType::L2);
-        //table.create_index(&["pos_km_vec"], lancedb::index::Index::IvfHnswPq(builder)).execute().await?;
-
         Ok(record_batch)
     }
 
@@ -208,9 +136,9 @@ impl Sp3Table {
             Field::new("satellite", DataType::Utf8, false),
             Field::new("constellation", DataType::Utf8, false),
             Field::new("pos_km_vec", vec_3d_type.clone(), false),
-            //Field::new("clock_usec", DataType::Float64, true),
-            // Field::new("vel_dms_vec", vec_3d_type.clone(), true), // (x,y,z) dm/sec
-            // Field::new("clock_roc", DataType::Float64, true), // 10^-4 microseconds/second
+            Field::new("clock_usec", DataType::Float64, true),
+            Field::new("vel_dms_vec", vec_3d_type.clone(), true), // (x,y,z) dm/sec
+            Field::new("clock_roc", DataType::Float64, true), // 10^-4 microseconds/second
         ]);
 
         Arc::new(schema)
@@ -294,7 +222,7 @@ impl Sp3File {
                 }
             }
             _ => {
-
+                // TODO add global distribution centers
             }
         }
 
@@ -319,7 +247,7 @@ impl Sp3File {
                 }
             }
             _ => {
-
+                // TODO add global distribution centers
             }
         }
 
@@ -346,7 +274,7 @@ impl Sp3File {
                 }
             }
             _ => {
-
+                // TODO add global distribution centers
             }
         }
 
@@ -380,7 +308,7 @@ impl Sp3File {
                 }
             }
             _ => {
-
+                // TODO add global distribution centers
             }
         }
 

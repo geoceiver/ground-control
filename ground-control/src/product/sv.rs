@@ -247,7 +247,7 @@ impl SVOrbits for SVOrbitsImpl {
 
         if orbit.is_some() {
 
-            let almanac = Almanac::new("/Users/kpw/shared/urbantraction/ground-control/pck08.pca");
+            let almanac = Almanac::new("pck08.pca");
             if almanac.is_err() {
                 info!("alamanc error: {}", almanac.as_ref().err().unwrap().to_string())
             }

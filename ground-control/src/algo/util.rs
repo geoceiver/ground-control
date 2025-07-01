@@ -1,15 +1,20 @@
-/// Derived from on https://github.com/planet36/ecef-geodetic/blob/main/olson_1996/olson_1996.c
-/// Converts ECEF coordinates to geodetic coordinates (latitude, longitude, height)
-/// Based on the algorithm from: https://ieeexplore.ieee.org/document/481290
-///
-/// # Arguments
-/// * `x` - X coordinate in meters
-/// * `y` - Y coordinate in meters
-/// * `z` - Z coordinate in meters
-///
-/// # Returns
-/// A tuple of (latitude in radians, longitude in radians, height in meters)
-pub fn latlon(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
+
+
+
+
+// Derived from on https://github.com/planet36/ecef-geodetic/blob/main/olson_1996/olson_1996.c
+// Converts ECEF coordinates to geodetic coordinates (latitude, longitude, height)
+// Based on the algorithm from: https://ieeexplore.ieee.org/document/481290
+
+// # Arguments
+// * `x` - X coordinate in meters
+// * `y` - Y coordinate in meters
+// * `z` - Z coordinate in meters
+
+// # Returns
+// A tuple of (latitude in radians, longitude in radians, height in meters)
+
+pub fn ecef_to_latlon(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
     // WGS-84 ellipsoid parameters
     let a = 6378137.0; // semi-major axis
     let e2 = 6.6943799901377997e-3; // first eccentricity squared
