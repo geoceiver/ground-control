@@ -16,26 +16,6 @@ The system consists of two main components:
 - **Ground Control**: Core library and API for satellite orbit calculations and SP3 file processing
 - **CDDIS Archiver**: High-performance data archiving service with parallel processing
 
-## Features
-
-### Ground Control Library
-
-- Real-time satellite position queries for any epoch
-- SP3 precision orbit file processing
-- Multi-source GNSS data support (IGS, CODE, etc.)
-- GPS time system conversions
-- Batch processing for multiple satellites
-- RESTful API with HTTP endpoints
-
-### CDDIS Archiver
-
-- Automated archiving of GNSS products from NASA CDDIS
-- Incremental processing (only new/changed files)
-- Configurable parallel downloads (up to 25 concurrent)
-- SHA512 hash validation for data integrity
-- Error recovery with exponential backoff
-- Recurring scheduled jobs
-
 ## Quick Start
 
 ### Prerequisites
