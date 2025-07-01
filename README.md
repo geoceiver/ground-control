@@ -148,7 +148,7 @@ cargo test --test queue_test
 CDDISArchiveRequest {
     request_id: "unique_id",
     parallelism: Some(25),           // Concurrent downloads
-    weeks: Some(WeekRange::AllWeeks), // GPS weeks to process
+    weeks: Some(CDDISArchiveRequestWeekRange::AllWeeks), // GPS weeks to process
     process_files: Some(true),       // Enable SP3 processing
     recurring: Some(300)             // Interval in seconds
 }
