@@ -1,6 +1,6 @@
 # CDDIS Archiver
 
-A high-performance Rust application for archiving GNSS data from NASA's Crustal Dynamics Data Information System (CDDIS) using Restate workflows for reliable data processing and storage.
+A high-performance Rust application for archiving GNSS data from NASA's Crustal Dynamics Data Information System (CDDIS) using Restate workflows for data processing and and Cloudflare R2 for storage.
 
 ## Overview
 
