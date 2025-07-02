@@ -3,6 +3,7 @@ mod product;
 mod algo;
 
 use axum::{extract::Path, response::IntoResponse, routing::{get, post}, Json, Router};
+use axum::http::{HeaderValue, Method};
 use data::sp3::{Sp3Data, Sp3DataImpl, Sp3File};
 use hifitime::Epoch;
 use product::sv::{DataSource, DataSources, DataSourcesImpl, Orbit, SVOrbits, SVOrbitsImpl, SVSource};
@@ -11,6 +12,17 @@ use restate_sdk::prelude::{Endpoint, HttpServer};
 use tracing::info;
 
 const INGRESS_URL:&str = "http://127.0.0.1:8080/";
+
+async fn add_cors_headers() -> impl IntoResponse {
+    (
+        [
+            ("Access-Control-Allow-Origin", "*"),
+            ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+            ("Access-Control-Allow-Headers", "Content-Type, Authorization"),
+        ],
+        "",
+    )
+}
 
 async fn process_sp3(Json(payload): Json<Sp3File>) -> impl IntoResponse {
 
@@ -36,7 +48,14 @@ async fn get_sources() -> impl IntoResponse {
         .send()
         .await;
 
-    Json(response.unwrap().text().await.unwrap()).into_response()
+    (
+        [
+            ("Access-Control-Allow-Origin", "*"),
+            ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+            ("Access-Control-Allow-Headers", "Content-Type, Authorization"),
+        ],
+        Json(response.unwrap().text().await.unwrap())
+    ).into_response()
 }
 
 async fn get_orbit(Path((source, sv, epoch_input)): Path<(String, String, Option<f64>)>) -> impl IntoResponse  {
@@ -62,10 +81,25 @@ async fn get_orbit(Path((source, sv, epoch_input)): Path<(String, String, Option
     if response.is_ok() && response.as_ref().unwrap().status().is_success() {
         let orbit:Orbit = serde_json::from_str(response.unwrap().text().await.unwrap().as_str()).unwrap();
 
-        return Json(orbit).into_response();
+        return (
+            [
+                ("Access-Control-Allow-Origin", "*"),
+                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+                ("Access-Control-Allow-Headers", "Content-Type, Authorization"),
+            ],
+            Json(orbit)
+        ).into_response();
     }
 
-    (StatusCode::NOT_FOUND, format!("SV {} not found", sv)).into_response()
+    (
+        StatusCode::NOT_FOUND,
+        [
+            ("Access-Control-Allow-Origin", "*"),
+            ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+            ("Access-Control-Allow-Headers", "Content-Type, Authorization"),
+        ],
+        format!("SV {} not found", sv)
+    ).into_response()
 
 }
 
@@ -105,7 +139,14 @@ async fn get_orbits(Path((source, epoch)): Path<(String, f64)>) -> impl IntoResp
         }
     }
 
-    Json(orbits).into_response()
+    (
+        [
+            ("Access-Control-Allow-Origin", "*"),
+            ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+            ("Access-Control-Allow-Headers", "Content-Type, Authorization"),
+        ],
+        Json(orbits)
+    ).into_response()
 }
 
 #[tokio::main]
@@ -126,10 +167,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // build our application with a route
     let app = Router::new()
-        .route("/orbit/{source}/{sv}/{epoch}", get(get_orbit))
-        .route("/orbits/{source}/{epoch}", get(get_orbits))
-        .route("/orbit/sources", get(get_sources))
-        .route("/orbit/source", post(process_sp3));
+        .route("/orbit/{source}/{sv}/{epoch}", get(get_orbit).options(add_cors_headers))
+        .route("/orbits/{source}/{epoch}", get(get_orbits).options(add_cors_headers))
+        .route("/orbit/sources", get(get_sources).options(add_cors_headers))
+        .route("/orbit/source", post(process_sp3).options(add_cors_headers));
 
     // run our app with hyper, listening globally on port 3000
     let _api_task = tokio::spawn(async move {

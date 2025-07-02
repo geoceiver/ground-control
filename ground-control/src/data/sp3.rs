@@ -72,7 +72,7 @@ impl Sp3Table {
 
         let vec_3d_type = Self::vec_3d_type();
 
-        for (e, sv, vec_3d) in sp3_data.satellites_position_km_iter() {
+        for (e, sv, _, _, vec_3d) in sp3_data.satellites_position_km_iter() {
 
             gpst_seconds_vec.push(e.to_gpst_seconds());
             product_run_id_vec.push(product_run_id);
@@ -105,6 +105,8 @@ impl Sp3Table {
             .add_child_data(pos_km_vec_data_values)
             .build()?));
 
+
+
         let schema = Self::arrow_schema();
 
         let record_batch = RecordBatch::try_new(
@@ -114,10 +116,10 @@ impl Sp3Table {
                 product_run_id_array,
                 satellite_array,
                 constellation_array,
-                pos_km_vec_data_array
+                pos_km_vec_data_array,
+
             ]
             ).unwrap();
-
 
         Ok(record_batch)
     }
@@ -136,9 +138,9 @@ impl Sp3Table {
             Field::new("satellite", DataType::Utf8, false),
             Field::new("constellation", DataType::Utf8, false),
             Field::new("pos_km_vec", vec_3d_type.clone(), false),
-            Field::new("clock_usec", DataType::Float64, true),
-            Field::new("vel_dms_vec", vec_3d_type.clone(), true), // (x,y,z) dm/sec
-            Field::new("clock_roc", DataType::Float64, true), // 10^-4 microseconds/second
+            // Field::new("clock_usec", DataType::Float64, true),
+            // Field::new("vel_dms_vec", vec_3d_type.clone(), true), // (x,y,z) dm/sec
+            // Field::new("clock_roc", DataType::Float64, true), // 10^-4 microseconds/second
         ]);
 
         Arc::new(schema)
@@ -402,8 +404,6 @@ impl Sp3Data for Sp3DataImpl {
                                     a.as_ref().unwrap().as_any().downcast_ref::<Float64Array>().unwrap().value(2))
                 ).collect();
 
-
-
             let sv = SVSource {satellite:satellite.clone(), data_source: data_source.clone()};
 
             let orbit = Orbit { sv,
@@ -417,7 +417,6 @@ impl Sp3Data for Sp3DataImpl {
                 clock_usec:None };
 
             ctx.object_client::<SVOrbitsClient>(orbit.sv.get_key()).update_orbit(Json(orbit)).send();
-
 
         }
 
