@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Geoceiver</title>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        background-color: white;
+      }
+      #map {
+        height: 100vh;
+        width: 100vw;
+      }
+      .controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 15px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        max-width: 300px;
+      }
+      .controls h3 {
+        margin: 0 0 10px 0;
+        color: #333;
+      }
+      .input-group {
+        margin-bottom: 10px;
+      }
+      .input-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        color: #555;
+      }
+      .input-group input,
+      .input-group button {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        box-sizing: border-box;
+      }
+      .input-group button {
+        background: #007cba;
+        color: white;
+        cursor: pointer;
+        border: none;
+      }
+      .input-group button:hover {
+        background: #005a87;
+      }
+      .input-group button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      .status {
+        margin-top: 10px;
+        padding: 8px;
+        border-radius: 3px;
+        font-size: 12px;
+      }
+      .status.loading {
+        background: #e7f3ff;
+        color: #0066cc;
+      }
+      .status.success {
+        background: #e8f5e8;
+        color: #006600;
+      }
+      .status.error {
+        background: #ffe6e6;
+        color: #cc0000;
+      }
+      .satellite-info {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        max-width: 250px;
+        font-size: 12px;
+      }
+      .legend {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 15px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        font-size: 12px;
+      }
+      .legend h4 {
+        margin: 0 0 10px 0;
+        color: #333;
+        font-size: 14px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 5px;
+      }
+      .legend-color {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid #ffffff;
+        margin-right: 8px;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div class="controls">
+      <h3>Geoceiver</h3>
+      <div class="input-group">
+        <label for="source">Data Source:</label>
+        <input
+          type="text"
+          id="source"
+          value="cddis_cod_ult"
+          placeholder="e.g., cddis_cod_ult"
+        />
+      </div>
+      <div class="input-group">
+        <label for="epoch">GPS Epoch: <span id="epochValue">1435215000</span></label>
+        <input
+          type="range"
+          id="epoch"
+          min="1435215000"
+          max="1435373100"
+          value="1435215000"
+          step="900"
+          style="width: 100%; margin: 5px 0;"
+        />
+        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #666;">
+          <span>1435215000</span>
+          <span>1435373100</span>
+        </div>
+      </div>
+      <div class="input-group">
+        <button id="loadSatellites">Load Satellites</button>
+      </div>
+      <div id="status" class="status" style="display: none"></div>
+    </div>
+
+    <div id="satelliteInfo" class="satellite-info" style="display: none">
+      <div id="satelliteDetails"></div>
+    </div>
+
+    <div class="legend">
+      <h4>Constellations</h4>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #1f77b4;"></div>
+        <span>GPS</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #ff7f0e;"></div>
+        <span>GLONASS</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #2ca02c;"></div>
+        <span>Galileo</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #d62728;"></div>
+        <span>BeiDou</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #9467bd;"></div>
+        <span>QZSS</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #8c564b;"></div>
+        <span>IRNSS</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #e377c2;"></div>
+        <span>SBAS</span>
+      </div>
+    </div>
+
+    <script>
+      // Initialize Mapbox (you'll need to add your own access token)
+      mapboxgl.accessToken =
+        "pk.eyJ1IjoidXJiYW50cmFjdGlvbiIsImEiOiJjbTJqcWh4ajAwN3FkMnFvdmVsNnRuZzA5In0.MECFs2tGWBpUMyYtVr2MJg";
+
+      const map = new mapboxgl.Map({
+        container: "map",
+        style: "mapbox://styles/mapbox/light-v11",
+        projection: "globe",
+        center: [0, 0],
+        zoom: 1,
+      });
+
+      // Add subtle white fog for a nice halo effect
+      map.on("style.load", () => {
+        map.setFog({
+          range: [0.8, 8],
+          color: "#ffffff",
+          "horizon-blend": 0.05,
+          "space-color": "#ffffff",
+          "star-intensity": 0.0,
+        });
+      });
+
+      let currentMarkers = [];
+      let satelliteData = [];
+      let orbitTraces = new Map(); // Store orbit traces by satellite ID
+
+      // Constellation color mapping
+      const constellationColors = {
+        'GPS': '#1f77b4',      // Blue
+        'GLONASS': '#ff7f0e',  // Orange  
+        'Galileo': '#2ca02c',  // Green
+        'BeiDou': '#d62728',   // Red
+        'QZSS': '#9467bd',     // Purple
+        'IRNSS': '#8c564b',    // Brown
+        'SBAS': '#e377c2'      // Pink
+      };
+
+      function getConstellationFromSatellite(satellite) {
+        const id = satellite.toUpperCase();
+        if (id.startsWith('G')) return 'GPS';
+        if (id.startsWith('R')) return 'GLONASS';
+        if (id.startsWith('E')) return 'Galileo';
+        if (id.startsWith('C')) return 'BeiDou';
+        if (id.startsWith('J')) return 'QZSS';
+        if (id.startsWith('I')) return 'IRNSS';
+        if (id.startsWith('S')) return 'SBAS';
+        return 'Unknown';
+      }
+
+      function getPRNFromSatellite(satellite) {
+        // Extract PRN number from satellite ID (e.g., "G01" -> "01", "E12" -> "12")
+        return satellite.slice(1);
+      }
+
+      function showStatus(message, type) {
+        const statusEl = document.getElementById("status");
+        statusEl.textContent = message;
+        statusEl.className = `status ${type}`;
+        statusEl.style.display = "block";
+      }
+
+      function hideStatus() {
+        document.getElementById("status").style.display = "none";
+      }
+
+      function clearMarkers() {
+        currentMarkers.forEach((marker) => {
+          marker.marker.remove();
+          if (marker.label) marker.label.remove();
+        });
+        currentMarkers = [];
+      }
+
+      function addSatelliteMarkers(orbits) {
+        clearMarkers();
+        satelliteData = orbits;
+
+        orbits.forEach((orbit, index) => {
+          if (orbit.pos_latlonalt && orbit.pos_latlonalt.length > 0) {
+            const [lat, lon, alt] = orbit.pos_latlonalt[0];
+            const constellation = getConstellationFromSatellite(orbit.sv.satellite);
+            const prn = getPRNFromSatellite(orbit.sv.satellite);
+            const color = constellationColors[constellation] || '#999999';
+
+            // Create marker element
+            const markerEl = document.createElement("div");
+            markerEl.className = "satellite-marker";
+            markerEl.style.width = "12px";
+            markerEl.style.height = "12px";
+            markerEl.style.borderRadius = "50%";
+            markerEl.style.backgroundColor = color;
+            markerEl.style.border = "2px solid #ffffff";
+            markerEl.style.cursor = "pointer";
+            markerEl.style.boxShadow = `0 0 10px ${color}80`;
+
+            // Create marker
+            const marker = new mapboxgl.Marker(markerEl)
+              .setLngLat([lon, lat])
+              .addTo(map);
+
+            // Create PRN label
+            const labelEl = document.createElement("div");
+            labelEl.className = "satellite-label";
+            labelEl.style.position = "absolute";
+            labelEl.style.color = color;
+            labelEl.style.fontSize = "10px";
+            labelEl.style.fontWeight = "bold";
+            labelEl.style.textShadow = "1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white";
+            labelEl.style.pointerEvents = "none";
+            labelEl.style.transform = "translate(8px, -6px)";
+            labelEl.textContent = prn;
+
+            const label = new mapboxgl.Marker(labelEl, { anchor: 'bottom-left' })
+              .setLngLat([lon, lat])
+              .addTo(map);
+
+            // Add click event for satellite info and orbit trace
+            markerEl.addEventListener("click", (e) => {
+              e.stopPropagation();
+              showSatelliteInfo(orbit, index);
+              fetchAndDrawOrbitTrace(orbit);
+            });
+
+            currentMarkers.push({ marker, label });
+          }
+        });
+
+        showStatus(`Loaded ${orbits.length} satellites`, "success");
+        setTimeout(hideStatus, 3000);
+      }
+
+      function showSatelliteInfo(orbit, index) {
+        const infoEl = document.getElementById("satelliteInfo");
+        const detailsEl = document.getElementById("satelliteDetails");
+
+        const [lat, lon, alt] = orbit.pos_latlonalt[0];
+        const altKm = (alt / 1000).toFixed(2);
+        const constellation = getConstellationFromSatellite(orbit.sv.satellite);
+        const prn = getPRNFromSatellite(orbit.sv.satellite);
+
+        detailsEl.innerHTML = `
+                <strong>${orbit.sv.satellite}</strong> (${constellation} PRN ${prn})<br>
+                <strong>Position:</strong><br>
+                Lat: ${lat.toFixed(6)}°<br>
+                Lon: ${lon.toFixed(6)}°<br>
+                Alt: ${altKm} km<br>
+                <strong>Source:</strong> ${orbit.sv.data_source.source}<br>
+                <strong>Analysis:</strong> ${orbit.sv.data_source.analysis_center}<br>
+                <strong>Type:</strong> ${orbit.sv.data_source.product_type}
+            `;
+
+        infoEl.style.display = "block";
+
+        // Hide after 5 seconds
+        setTimeout(() => {
+          infoEl.style.display = "none";
+        }, 5000);
+      }
+
+      let loadingTimeout = null;
+
+      async function loadSatellites(showLoadingStatus = true) {
+        const source = document.getElementById("source").value.trim();
+        const epoch = document.getElementById("epoch").value.trim();
+
+        if (!source || !epoch) {
+          showStatus("Please enter both source and epoch", "error");
+          return;
+        }
+
+        if (showLoadingStatus) {
+          showStatus("Loading satellites...", "loading");
+        }
+
+        try {
+          const response = await fetch(
+            `http://localhost:3010/orbits/${source}/${epoch}`,
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const orbits = await response.json();
+
+          if (!Array.isArray(orbits) || orbits.length === 0) {
+            showStatus("No satellite data found", "error");
+            return;
+          }
+
+          addSatelliteMarkers(orbits);
+        } catch (error) {
+          console.error("Error loading satellites:", error);
+          showStatus(`Error: ${error.message}`, "error");
+        }
+      }
+
+      function debouncedLoadSatellites() {
+        if (loadingTimeout) {
+          clearTimeout(loadingTimeout);
+        }
+        
+        showStatus("Updating satellites...", "loading");
+        
+        loadingTimeout = setTimeout(() => {
+          loadSatellites(false);
+        }, 300);
+      }
+
+      async function fetchAndDrawOrbitTrace(orbit) {
+        const source = document.getElementById("source").value.trim();
+        const currentEpoch = parseFloat(document.getElementById("epoch").value);
+        const satelliteId = orbit.sv.satellite;
+        
+        try {
+          showStatus(`Loading orbit trace for ${satelliteId}...`, "loading");
+          
+          const response = await fetch(
+            `http://localhost:3010/orbit/${source}/${satelliteId}/${currentEpoch}`
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const orbitData = await response.json();
+          
+          if (orbitData.pos_latlonalt && orbitData.pos_latlonalt.length > 0) {
+            drawOrbitTrace(satelliteId, orbitData, orbit);
+            showStatus(`Orbit trace loaded for ${satelliteId}`, "success");
+            setTimeout(hideStatus, 2000);
+          } else {
+            showStatus(`No orbit trace data for ${satelliteId}`, "error");
+          }
+        } catch (error) {
+          console.error('Error fetching orbit trace:', error);
+          showStatus(`Error loading trace: ${error.message}`, "error");
+        }
+      }
+
+      function drawOrbitTrace(satelliteId, orbitData, originalOrbit) {
+        const constellation = getConstellationFromSatellite(satelliteId);
+        const color = constellationColors[constellation] || '#999999';
+        
+        // Remove existing trace for this satellite
+        if (orbitTraces.has(satelliteId)) {
+          const existingTrace = orbitTraces.get(satelliteId);
+          if (map.getSource(existingTrace.sourceId)) {
+            map.removeLayer(existingTrace.layerId);
+            map.removeSource(existingTrace.sourceId);
+          }
+        }
+
+        // Convert lat/lon/alt data to GeoJSON LineString
+        const coordinates = orbitData.pos_latlonalt.map(([lat, lon, alt]) => [lon, lat]);
+        
+        const sourceId = `orbit-trace-${satelliteId}`;
+        const layerId = `orbit-trace-layer-${satelliteId}`;
+        
+        // Add trace source
+        map.addSource(sourceId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {
+              satellite: satelliteId,
+              constellation: constellation
+            },
+            geometry: {
+              type: 'LineString',
+              coordinates: coordinates
+            }
+          }
+        });
+
+        // Add trace layer
+        map.addLayer({
+          id: layerId,
+          type: 'line',
+          source: sourceId,
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': color,
+            'line-width': 2,
+            'line-opacity': 0.8
+          }
+        });
+
+        // Store trace info for cleanup
+        orbitTraces.set(satelliteId, { sourceId, layerId });
+      }
+
+      function clearAllOrbitTraces() {
+        orbitTraces.forEach((trace, satelliteId) => {
+          if (map.getSource(trace.sourceId)) {
+            map.removeLayer(trace.layerId);
+            map.removeSource(trace.sourceId);
+          }
+        });
+        orbitTraces.clear();
+      }
+
+      // Event listeners
+      document
+        .getElementById("loadSatellites")
+        .addEventListener("click", loadSatellites);
+
+      // Update epoch value display and trigger automatic loading
+      document.getElementById("epoch").addEventListener("input", (e) => {
+        const epochValue = e.target.value;
+        document.getElementById("epochValue").textContent = epochValue;
+        debouncedLoadSatellites();
+      });
+
+      document.getElementById("source").addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          loadSatellites();
+        }
+      });
+
+      // Hide satellite info when clicking on map
+      map.on("click", () => {
+        document.getElementById("satelliteInfo").style.display = "none";
+      });
+
+      // Clear traces when loading new satellite data
+      document.getElementById("loadSatellites").addEventListener("click", () => {
+        clearAllOrbitTraces();
+      });
+
+      // Clear traces when slider changes
+      document.getElementById("epoch").addEventListener("input", () => {
+        clearAllOrbitTraces();
+      });
+    </script>
+  </body>
+</html>
