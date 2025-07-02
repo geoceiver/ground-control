@@ -2,6 +2,9 @@
 
 A high-performance GNSS data processing and archiving system built with Rust, featuring satellite orbit calculations, real-time position/corrections API, and automated data archival of orbit and clock corrections data.
 
+![image](https://github.com/user-attachments/assets/fd6fded3-fd36-4c00-acb8-e4f001e11ae6)
+
+
 ## Overview
 
 Ground Control is a comprehensive GNSS (Global Navigation Satellite System) data processing platform that provides:
