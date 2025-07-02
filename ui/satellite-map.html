@@ -141,7 +141,9 @@
         />
       </div>
       <div class="input-group">
-        <label for="epoch">GPS Epoch: <span id="epochValue">1435215000</span></label>
+        <label for="epoch"
+          >GPS Epoch: <span id="epochValue">1435215000</span></label
+        >
         <input
           type="range"
           id="epoch"
@@ -149,9 +151,16 @@
           max="1435373100"
           value="1435215000"
           step="900"
-          style="width: 100%; margin: 5px 0;"
+          style="width: 100%; margin: 5px 0"
         />
-        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #666;">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #666;
+          "
+        >
           <span>1435215000</span>
           <span>1435373100</span>
         </div>
@@ -169,39 +178,38 @@
     <div class="legend">
       <h4>Constellations</h4>
       <div class="legend-item">
-        <div class="legend-color" style="background-color: #1f77b4;"></div>
+        <div class="legend-color" style="background-color: #1f77b4"></div>
         <span>GPS</span>
       </div>
       <div class="legend-item">
-        <div class="legend-color" style="background-color: #ff7f0e;"></div>
+        <div class="legend-color" style="background-color: #ff7f0e"></div>
         <span>GLONASS</span>
       </div>
       <div class="legend-item">
-        <div class="legend-color" style="background-color: #2ca02c;"></div>
+        <div class="legend-color" style="background-color: #2ca02c"></div>
         <span>Galileo</span>
       </div>
       <div class="legend-item">
-        <div class="legend-color" style="background-color: #d62728;"></div>
+        <div class="legend-color" style="background-color: #d62728"></div>
         <span>BeiDou</span>
       </div>
       <div class="legend-item">
-        <div class="legend-color" style="background-color: #9467bd;"></div>
+        <div class="legend-color" style="background-color: #9467bd"></div>
         <span>QZSS</span>
       </div>
       <div class="legend-item">
-        <div class="legend-color" style="background-color: #8c564b;"></div>
+        <div class="legend-color" style="background-color: #8c564b"></div>
         <span>IRNSS</span>
       </div>
       <div class="legend-item">
-        <div class="legend-color" style="background-color: #e377c2;"></div>
+        <div class="legend-color" style="background-color: #e377c2"></div>
         <span>SBAS</span>
       </div>
     </div>
 
     <script>
       // Initialize Mapbox (you'll need to add your own access token)
-      mapboxgl.accessToken =
-        "pk.eyJ1IjoidXJiYW50cmFjdGlvbiIsImEiOiJjbTJqcWh4ajAwN3FkMnFvdmVsNnRuZzA5In0.MECFs2tGWBpUMyYtVr2MJg";
+      mapboxgl.accessToken = "MAPBOX_TOKEN";
 
       const map = new mapboxgl.Map({
         container: "map",
@@ -228,25 +236,25 @@
 
       // Constellation color mapping
       const constellationColors = {
-        'GPS': '#1f77b4',      // Blue
-        'GLONASS': '#ff7f0e',  // Orange  
-        'Galileo': '#2ca02c',  // Green
-        'BeiDou': '#d62728',   // Red
-        'QZSS': '#9467bd',     // Purple
-        'IRNSS': '#8c564b',    // Brown
-        'SBAS': '#e377c2'      // Pink
+        GPS: "#1f77b4", // Blue
+        GLONASS: "#ff7f0e", // Orange
+        Galileo: "#2ca02c", // Green
+        BeiDou: "#d62728", // Red
+        QZSS: "#9467bd", // Purple
+        IRNSS: "#8c564b", // Brown
+        SBAS: "#e377c2", // Pink
       };
 
       function getConstellationFromSatellite(satellite) {
         const id = satellite.toUpperCase();
-        if (id.startsWith('G')) return 'GPS';
-        if (id.startsWith('R')) return 'GLONASS';
-        if (id.startsWith('E')) return 'Galileo';
-        if (id.startsWith('C')) return 'BeiDou';
-        if (id.startsWith('J')) return 'QZSS';
-        if (id.startsWith('I')) return 'IRNSS';
-        if (id.startsWith('S')) return 'SBAS';
-        return 'Unknown';
+        if (id.startsWith("G")) return "GPS";
+        if (id.startsWith("R")) return "GLONASS";
+        if (id.startsWith("E")) return "Galileo";
+        if (id.startsWith("C")) return "BeiDou";
+        if (id.startsWith("J")) return "QZSS";
+        if (id.startsWith("I")) return "IRNSS";
+        if (id.startsWith("S")) return "SBAS";
+        return "Unknown";
       }
 
       function getPRNFromSatellite(satellite) {
@@ -280,9 +288,11 @@
         orbits.forEach((orbit, index) => {
           if (orbit.pos_latlonalt && orbit.pos_latlonalt.length > 0) {
             const [lat, lon, alt] = orbit.pos_latlonalt[0];
-            const constellation = getConstellationFromSatellite(orbit.sv.satellite);
+            const constellation = getConstellationFromSatellite(
+              orbit.sv.satellite,
+            );
             const prn = getPRNFromSatellite(orbit.sv.satellite);
-            const color = constellationColors[constellation] || '#999999';
+            const color = constellationColors[constellation] || "#999999";
 
             // Create marker element
             const markerEl = document.createElement("div");
@@ -307,12 +317,15 @@
             labelEl.style.color = color;
             labelEl.style.fontSize = "10px";
             labelEl.style.fontWeight = "bold";
-            labelEl.style.textShadow = "1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white";
+            labelEl.style.textShadow =
+              "1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white";
             labelEl.style.pointerEvents = "none";
             labelEl.style.transform = "translate(8px, -6px)";
             labelEl.textContent = prn;
 
-            const label = new mapboxgl.Marker(labelEl, { anchor: 'bottom-left' })
+            const label = new mapboxgl.Marker(labelEl, {
+              anchor: "bottom-left",
+            })
               .setLngLat([lon, lat])
               .addTo(map);
 
@@ -401,9 +414,9 @@
         if (loadingTimeout) {
           clearTimeout(loadingTimeout);
         }
-        
+
         showStatus("Updating satellites...", "loading");
-        
+
         loadingTimeout = setTimeout(() => {
           loadSatellites(false);
         }, 300);
@@ -413,12 +426,12 @@
         const source = document.getElementById("source").value.trim();
         const currentEpoch = parseFloat(document.getElementById("epoch").value);
         const satelliteId = orbit.sv.satellite;
-        
+
         try {
           showStatus(`Loading orbit trace for ${satelliteId}...`, "loading");
-          
+
           const response = await fetch(
-            `http://localhost:3010/orbit/${source}/${satelliteId}/${currentEpoch}`
+            `http://localhost:3010/orbit/${source}/${satelliteId}/${currentEpoch}`,
           );
 
           if (!response.ok) {
@@ -426,7 +439,7 @@
           }
 
           const orbitData = await response.json();
-          
+
           if (orbitData.pos_latlonalt && orbitData.pos_latlonalt.length > 0) {
             drawOrbitTrace(satelliteId, orbitData, orbit);
             showStatus(`Orbit trace loaded for ${satelliteId}`, "success");
@@ -435,15 +448,15 @@
             showStatus(`No orbit trace data for ${satelliteId}`, "error");
           }
         } catch (error) {
-          console.error('Error fetching orbit trace:', error);
+          console.error("Error fetching orbit trace:", error);
           showStatus(`Error loading trace: ${error.message}`, "error");
         }
       }
 
       function drawOrbitTrace(satelliteId, orbitData, originalOrbit) {
         const constellation = getConstellationFromSatellite(satelliteId);
-        const color = constellationColors[constellation] || '#999999';
-        
+        const color = constellationColors[constellation] || "#999999";
+
         // Remove existing trace for this satellite
         if (orbitTraces.has(satelliteId)) {
           const existingTrace = orbitTraces.get(satelliteId);
@@ -454,41 +467,44 @@
         }
 
         // Convert lat/lon/alt data to GeoJSON LineString
-        const coordinates = orbitData.pos_latlonalt.map(([lat, lon, alt]) => [lon, lat]);
-        
+        const coordinates = orbitData.pos_latlonalt.map(([lat, lon, alt]) => [
+          lon,
+          lat,
+        ]);
+
         const sourceId = `orbit-trace-${satelliteId}`;
         const layerId = `orbit-trace-layer-${satelliteId}`;
-        
+
         // Add trace source
         map.addSource(sourceId, {
-          type: 'geojson',
+          type: "geojson",
           data: {
-            type: 'Feature',
+            type: "Feature",
             properties: {
               satellite: satelliteId,
-              constellation: constellation
+              constellation: constellation,
             },
             geometry: {
-              type: 'LineString',
-              coordinates: coordinates
-            }
-          }
+              type: "LineString",
+              coordinates: coordinates,
+            },
+          },
         });
 
         // Add trace layer
         map.addLayer({
           id: layerId,
-          type: 'line',
+          type: "line",
           source: sourceId,
           layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
+            "line-join": "round",
+            "line-cap": "round",
           },
           paint: {
-            'line-color': color,
-            'line-width': 2,
-            'line-opacity': 0.8
-          }
+            "line-color": color,
+            "line-width": 2,
+            "line-opacity": 0.8,
+          },
         });
 
         // Store trace info for cleanup
@@ -529,9 +545,11 @@
       });
 
       // Clear traces when loading new satellite data
-      document.getElementById("loadSatellites").addEventListener("click", () => {
-        clearAllOrbitTraces();
-      });
+      document
+        .getElementById("loadSatellites")
+        .addEventListener("click", () => {
+          clearAllOrbitTraces();
+        });
 
       // Clear traces when slider changes
       document.getElementById("epoch").addEventListener("input", () => {

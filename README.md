@@ -54,6 +54,12 @@ cargo run --bin ground-control
 cargo run --bin cddis-archiver
 ```
 
+## Web Interface
+
+The project includes an interactive satellite visualization interface:
+
+- **Satellite Map**: `ui/satellite-map.html` - Interactive globe showing real-time satellite positions with constellation colors, orbit traces, and detailed satellite information
+
 ## API Reference
 
 ### Ground Control API Endpoints
@@ -105,7 +111,8 @@ ground-control/
 │   │   ├── queue.rs        # File processing queue
 │   │   └── r2.rs           # Cloud storage operations
 │   └── tests/
-└── ui/                     # Web interface (separate)
+└── ui/                     # Web interface
+    └── satellite-map.html  # Interactive satellite visualization
 ```
 
 ### Testing
