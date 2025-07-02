@@ -40,7 +40,7 @@ The interface connects to the Ground Control API using these endpoints:
 
 ### Configuration
 
-- **Mapbox Token**: Uses a configured Mapbox access token for map rendering
+- **Mapbox Token**: Update mapbox token in html file
 - **API Endpoint**: Hardcoded to `localhost:3010` - modify for production deployments
 - **Data Sources**: Configurable through the source input field
 
