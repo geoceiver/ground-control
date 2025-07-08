@@ -618,7 +618,7 @@ dependencies = [
  "hifitime",
  "object_store",
  "reqwest",
- "restate-sdk",
+ "restate-sdk 0.6.0",
  "restate-sdk-test-env",
  "serde",
  "serde_json",
@@ -1267,7 +1267,7 @@ dependencies = [
  "object_store",
  "regex",
  "reqwest",
- "restate-sdk",
+ "restate-sdk 0.6.0",
  "restate-sdk-test-env",
  "serde",
  "serde_json",
@@ -2861,8 +2861,38 @@ dependencies = [
  "prettyplease",
  "rand",
  "regress 0.10.3",
- "restate-sdk-macros",
- "restate-sdk-shared-core",
+ "restate-sdk-macros 0.4.0",
+ "restate-sdk-shared-core 0.3.0",
+ "serde",
+ "serde_json",
+ "syn 2.0.104",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "typify",
+ "uuid",
+]
+
+[[package]]
+name = "restate-sdk"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6581ff709b523bc4abbb69e51bb23abdc3cf10fea11382fe45c01746c775dfe"
+dependencies = [
+ "bytes",
+ "futures",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "jsonptr",
+ "pin-project-lite",
+ "prettyplease",
+ "rand",
+ "regress 0.10.3",
+ "restate-sdk-macros 0.6.0",
+ "restate-sdk-shared-core 0.4.0",
  "serde",
  "serde_json",
  "syn 2.0.104",
@@ -2877,6 +2907,17 @@ dependencies = [
 [[package]]
 name = "restate-sdk-macros"
 version = "0.4.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
+]
+
+[[package]]
+name = "restate-sdk-macros"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56e32995cb558bd7138ae2ac8dd29febf32c27870bb6ca172dc61a174b15e205"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2906,13 +2947,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "restate-sdk-shared-core"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f424311f9250ef7274efe7257472b1bec604d895d7c1e7a9b8671697fac74c9"
+dependencies = [
+ "base64 0.22.1",
+ "bs58",
+ "bytes",
+ "bytes-utils",
+ "http",
+ "jsonwebtoken",
+ "paste",
+ "prost",
+ "ring",
+ "serde",
+ "sha2 0.11.0-pre.3",
+ "strum",
+ "thiserror 2.0.12",
+ "tracing",
+]
+
+[[package]]
 name = "restate-sdk-test-env"
 version = "0.4.0"
 dependencies = [
  "anyhow",
  "nu-ansi-term 0.50.1",
  "reqwest",
- "restate-sdk",
+ "restate-sdk 0.4.0",
  "serde",
  "serde_json",
  "testcontainers",
