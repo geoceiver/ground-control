@@ -51,7 +51,7 @@ impl Sp3Table {
         Sp3Table {table_name: table_name}
     }
 
-    pub async fn load_sp3_file(&self, sp3_file:&Sp3File) -> Result<RecordBatch, anyhow::Error> {
+    pub async fn load_sp3_file(&self, sp3_file:&Sp3File) -> Result<RecordBatch, HandlerError> {
 
         let r2_bucket = r2_cddis_bucket()?;
         let response = r2_bucket.get(&Path::from_absolute_path(&sp3_file.archive_path)?).await?;
@@ -60,7 +60,13 @@ impl Sp3Table {
         let sp3_reader = GzDecoder::new(sp3_bytes.reader());
         let mut buffered_sp3_reader = BufReader::new(sp3_reader);
 
-        let sp3_data = SP3::from_reader(&mut buffered_sp3_reader)?;
+        let sp3_data_result = SP3::from_reader(&mut buffered_sp3_reader);
+
+        if sp3_data_result.is_err() {
+            return Err(TerminalError::new(format!("Unable to parse {}", sp3_file.archive_path)).into());
+        }
+
+        let sp3_data = sp3_data_result.unwrap();
 
         let product_run_id = sp3_file.get_product_run_id()?;
 
