@@ -347,7 +347,13 @@ impl Sp3Data for Sp3DataImpl {
         let table_name = sp3_file.get_table_name()?;
 
         let sp3_table = Sp3Table::new(table_name);
-        let record_data = sp3_table.load_sp3_file(&sp3_file).await?;
+        let record_data_result = sp3_table.load_sp3_file(&sp3_file).await;
+
+        if record_data_result.is_err() {
+            return Err(TerminalError::new(format!("Unable to parse {}", sp3_file.archive_path)).into());
+        }
+
+        let record_data = record_data_result.unwrap();
         //let record_data = ctx.run(||).await?;
 
         let satellite_array = record_data.column_by_name("satellite")
