@@ -338,6 +338,10 @@ impl Sp3Data for Sp3DataImpl {
 
         let sp3_file = sp3_file.into_inner();
 
+        if(!sp3_file.is_sp3()) {
+            return Err(TerminalError::new(format!("not SP3 file: {}", sp3_file.archive_path)).into())
+        }
+
         info!("sp3_file {:?}", sp3_file);
 
         let table_name = sp3_file.get_table_name()?;
