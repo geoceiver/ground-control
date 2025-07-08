@@ -3485,8 +3485,7 @@ dependencies = [
 [[package]]
 name = "sp3"
 version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e902f63cae41c29406c3a6d128d5603f4c2496d1ad61a106fa238e5cf8b05f8"
+source = "git+https://github.com/kpwebb/sp3#1931b359b2f7dc8169ae9cf1a9eccd16c5fb63b6"
 dependencies = [
  "flate2",
  "gnss-rs",

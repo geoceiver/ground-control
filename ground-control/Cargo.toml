@@ -22,7 +22,7 @@ reqwest = {version = "0.12.14",  features=["stream", "multipart", "rustls-tls", 
 restate-sdk = { version = "0.6.0" }
 serde = "1.0.219"
 serde_json = "1.0.140"
-sp3 = "1.1.2"
+sp3 = {git="https://github.com/kpwebb/sp3"}
 tokio = {version = "1.44.1",  features = ["full"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
